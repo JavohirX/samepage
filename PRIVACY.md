@@ -1,8 +1,11 @@
 # Privacy
 
-This build is a judging portal for one event's fixture, plus the accounts the seed creates.
+This build stores the accounts people create, the events, teams and submissions they make, and the fixture in demo mode.
 
-- Passwords are hashed. Fixture accounts have an unusable password. Demo accounts share one hash of `samepage-demo`, which production mode refuses.
+- Passwords are hashed (PBKDF2). Fixture accounts and invited accounts have an unusable password until the person sets one. Demo accounts share one hash of `samepage-demo`, which production mode refuses.
+- Invite and set-password links are stored as sha256 only.
+- A draft submission and its images are visible to its team and the organizers only. Team member emails are visible to the team and the organizers.
+- Uploaded images are stored in the database as uploaded (no metadata stripping).
 - Bearer tokens are stored as sha256. In demo mode the raw tokens are printed at boot.
 - Judge comments are visible to that judge and to organizers, not to participants or visitors.
 - Team member emails are not on the public project page.

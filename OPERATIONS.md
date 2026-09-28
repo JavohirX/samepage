@@ -31,7 +31,7 @@ Logs go to stdout: one gunicorn access line per request with `cid=<correlation i
 
 `SAMEPAGE_MODE` is `demo` or `production`. Outside compose it defaults to `production`; any other value stops the process.
 
-Set a `SECRET_KEY` of at least 50 characters, `DB_OWNER_PASSWORD` and `DB_APP_PASSWORD` (URL-safe characters; they go into a connection URL), `ALLOWED_HOSTS`, and `PUBLIC_URL`. When `PUBLIC_URL` is https, session and CSRF cookies are marked Secure. Put TLS on a reverse proxy. Behind exactly one proxy that sets `X-Forwarded-For`, set `SAMEPAGE_NUM_PROXIES=1` so the sign-in throttle (10 POSTs a minute per client) keys on the real client. The throttle counts in a Postgres table (`samepage_cache`), so the limit holds across all gunicorn workers.
+Set a `SECRET_KEY` of at least 50 characters, `DB_OWNER_PASSWORD` and `DB_APP_PASSWORD` (URL-safe characters; they go into a connection URL), `ALLOWED_HOSTS`, and `PUBLIC_URL`. When `PUBLIC_URL` is https, session and CSRF cookies are marked Secure. Put TLS on a reverse proxy. Behind exactly one proxy that sets `X-Forwarded-For`, set `SAMEPAGE_NUM_PROXIES=1` so the sign-in throttle (10 POSTs a minute per client, shared by sign-in, sign-up and set-password) keys on the real client. The throttle counts in a Postgres table (`samepage_cache`), so the limit holds across all gunicorn workers.
 
 The process refuses to start, and names each fix, when any of these hold (`samepage/ops/preflight.py`):
 
@@ -48,7 +48,23 @@ SAMEPAGE_MODE=production SECRET_KEY=... DB_OWNER_PASSWORD=... DB_APP_PASSWORD=..
   ALLOWED_HOSTS=portal.example.org PUBLIC_URL=https://portal.example.org docker compose up --wait
 ```
 
-A production database starts empty. This build has no admin site, no create-event page and no import command, so the first event, its judges and its teams have to be created in a Django shell as the owner: `docker compose run --rm -e DATABASE_URL=postgres://owner:<owner password>@db:5432/samepage app python manage.py shell` (the models are in `samepage/apps/portal/models.py`). That is the largest gap for a real adopter (README, Limits).
+A production database starts empty. Make the first admin, then do everything else in the portal:
+
+```
+docker compose exec -e SAMEPAGE_ADMIN_PASSWORD app python manage.py samepage_admin --email you@example.org --name "You"
+```
+
+The password comes from `SAMEPAGE_ADMIN_PASSWORD` (or a prompt with a terminal), never from the command line, must be 10 characters or more and cannot be the demo password. A one-off `manage.py` command in the app container connects with `DB_OWNER_URL`, which compose sets; the served process keeps using `samepage_app`. Running it again for an existing email promotes that account and sets the password.
+
+Then sign in at `/login` and:
+
+1. **New event** on the home page: windows (UTC), tracks, prizes, rubric, custom questions, team size. It starts as a draft; **Move to open** on its settings page.
+2. Invite judges and co-organizers by email on the settings page. A new person gets a one-time set-password link on the next page (valid 14 days). Nothing is emailed; send it yourself.
+3. Participants sign up at `/signup`, start a team on the event page and invite their teammates with the team's link.
+4. After the deadline: **Move to closed**, **Move to judging**, then **Issue batches** on the progress page. Watch Progress; top up or abandon batches as judges drop out; reopen a finalized score from the assignments page if a judge asks.
+5. Confirm any duplicate decision, then **Publish results**. The ranking is frozen from then on.
+
+`tools/lifecycle_check.py` does all of that over HTTP against a running portal; CI runs it in production mode on a fresh volume (receipts/production-lifecycle.txt). A forgotten password: `docker compose exec app python manage.py changepassword <email>`.
 
 Upgrade is `git pull`, `docker compose build`, `docker compose up --wait`. Migrations are forward only. Roll back by restoring the backup taken before the upgrade, then checking out the previous tree.
 
@@ -80,7 +96,7 @@ python -m samepage.ops.entrypoint
 ## If someone forks this
 
 1. Run production mode on a new database until it boots clean.
-2. Create the event, tracks, criteria, judges and teams in the Django shell (see Production). This is manual today.
+2. `manage.py samepage_admin`, sign in, create the event (see Production).
 3. Point people at Download CSV on any organizer list, and at `results.json` after publish.
 
-The first gaps: no event or team management in the UI, no SSO, no webhooks, no signed records, and read isolation lives in application code.
+The first gaps: no email delivery (links are handed on by hand), no SSO, no self-service password reset, no webhooks, no signed records, and read isolation lives in application code.

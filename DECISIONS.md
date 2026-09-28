@@ -14,3 +14,7 @@
 | D10 | Bearer tokens in `.dogfood.toml`, not cookies. | `run.py` then reaches the deadline check instead of a CSRF 403. |
 | D11 | 403 before resolving a forbidden id. | A 404 fails the peer-score check and depends on whether the row exists. |
 | D12 | Nothing is signed. | Stated in Limits. Detection is the audit chain plus a downloaded CSV. |
+| D13 | Uploaded images are stored in Postgres, not on disk. | A `pg_dump` is then the whole backup, and the app container keeps a read-only root. Images are capped at 2 MB. |
+| D14 | Results refit on read when their inputs changed, not on every write. | A full fit with leave-one-judge-out takes seconds; a judge finalizing 30 projects should not wait for 30 of them. The fingerprint makes staleness impossible to miss. |
+| D15 | Publish freezes the inputs, not just the page. | A frozen page over mutable scores would disagree with `scores.csv`. Every write that feeds the ranking answers 409 after publish. |
+| D16 | Invite and password links are shown once and never emailed. | The portal runs offline. Only the sha256 is stored, like bearer tokens. |

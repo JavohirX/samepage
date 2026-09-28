@@ -14,7 +14,13 @@ Each counted review is the project's quality, plus that judge's lean, plus noise
 
 A large λ means most of what looks like a harsh or generous judge is noise, so little of it is removed. A judge with one score keeps most of it, because one score is not evidence of a lean.
 
-The weighted total is Σ wᵢ vᵢ / Σ wᵢ with every weight positive, computed with exact fractions. On evt_01 the weights are 1:1:1, so the total is the mean of functionality, quality and innovation. The model is linear, so normalising the total is the same as weighting per-criterion normalised scores.
+The weighted total is Σ wᵢ vᵢ / Σ wᵢ with every weight positive, computed with exact fractions. The organizer sets the weights per event, and may override them per track (settings page, or `POST /e/<event>/criteria.json`); each review uses the weights of its project's track. Criteria are fixed once the first score exists, because a review must score every criterion; weights can change until publish, each change is an audit event with before and after, and the next results read refits. On evt_01 the weights are 1:1:1, so the total is the mean of functionality, quality and innovation. The model is linear, so normalising the total is the same as weighting per-criterion normalised scores.
+
+## What counts
+
+A review counts when every criterion's current score is **final** and the project is active (or merged into an active project). A draft autosave, and a final score an organizer has reopened (unlocked), are in `scores.csv` with `counted=false` and `excluded_reason` `not_final:draft` or `not_final:unlocked`, and they are not in the fit. A judge finalizes from the console; a final score changes only after an organizer unlocks it (`POST /e/<event>/assignments/<judge>/<project>/unlock`, audited, and the database refuses any other way).
+
+Each results snapshot records a fingerprint of its inputs: the counted reviews with their weights, the projects being ranked and the event's judges. Before publish, a read of the results or the lab whose fingerprint no longer matches refits first, so a new finalized score, a weight change or a duplicate decision is in the next page anyone sees. Publish refits if needed and stamps that snapshot; from then on every reader, signed in or not, gets exactly it, and the write paths that feed the ranking (scores, unlocks, weights, duplicate decisions, assignment runs, abandoning a batch) answer 409.
 
 ## The grid is part of the method
 
@@ -35,7 +41,7 @@ The adjusted score is â, the GLS project effect at λ̂, shown to 3 decimal pla
 
 ## What the fixture does
 
-Counted rows are the reviews whose project is still active. The importer's default, keep-latest, withdraws prj_07 (the earlier Dry Harbour) and keeps its five reviews in `scores.csv` with `counted=false`. That leaves 121 counted reviews and 40 projects.
+Every imported score is final. Dry Harbour is two submissions by one team (prj_07 at 04:29, prj_41 at 17:57 on the deadline day, same repo). The rule is explicit and written down in the data: same team and (same normalised repo or same case-folded title) forms a duplicate group; the default resolution is keep-latest; the importer applies it, writes a `duplicate.apply` audit event, and leaves the group **provisional**. Publish is refused until an organizer confirms keep-latest or switches to merge, which is another audit event; after publish it cannot be switched. Keep-latest withdraws prj_07 and keeps its five reviews in `scores.csv` with `counted=false`. That leaves 121 counted reviews and 40 projects.
 
 On that set the engine reports:
 
@@ -50,7 +56,7 @@ Switching the duplicate to merge retargets prj_07's five reviews onto prj_41, so
 
 - **Raw mean.** The fraction mean of counted weighted totals.
 - **Raptors k=10.** (n · raw + 10 · grand) / (n + 10), where grand is the mean of all counted weighted totals. This implements the Code Olympics formula. It does not claim to reproduce every published digit from that event.
-- **Z-scores.** Per judge, (y − mean) / sd. Undefined when n < 2 or sd = 0. On this fixture that includes jdg_07 (straight line) and the one-score judges. The lab shows z as a refused method, with the failure table as the reason. It is not the published ranking.
+- **Z-scores.** Per judge, (y − mean) / sd. Undefined when n < 2 or sd = 0. On this fixture that includes jdg_07 (4/4/4 on everything, sd 0) and the one-score judges (jdg_23; jdg_01 once merge counts its one Dry Harbour review). The lab shows z as a refused method, with the failure table as the reason. It is not the published ranking. Nothing divides by a zero standard deviation: the REML fit never uses a per-judge sd, and a judge with one review keeps most of their lean in the noise term.
 
 ## Flags
 
@@ -75,12 +81,19 @@ Leave-one-judge-out refits the grid once per counted judge (29 on the fixture) a
 
 ## Assignment
 
-The dry run and top-up use the same matcher: repeated maximum bipartite matchings. There is no action that issues a fresh initial design; the dry run only reports one. An edge exists only when the judge is eligible for the track, has no conflict of interest, has not already reviewed the project, and is under the load cap (12 by default). Each round uses a judge at most once. Top-up adds at most one extra review per judge.
+Issuing batches, the dry run and top-up use the same matcher: repeated maximum bipartite matchings. An edge exists only when the judge is eligible for the track, has no conflict of interest, has not already reviewed the project, and is under the load cap. Each round uses a judge at most once. Projects and judges are sorted by id before the seeded shuffle, so the same inputs and seed issue the same pairs.
+
+- **Issue batches** (`kind=initial`): every submitted project gets reviewers until it has `coverage` (default 3), counting assignments that already exist; `cap` (default 12) is the most any judge carries. Drafts and withdrawn projects are never assigned.
+- **Top up** (`kind=topup`): projects with fewer than three active assignments get one more reviewer each, at most one extra per judge. Unfinished assignments in an abandoned batch do not count, so that work goes to someone else, and the judge of an abandoned batch gets no new work from a run.
+- **Assign one** (`POST /e/<event>/assignments.json {judge, project}`): the same rules, checked one by one: 409 for another track, a conflict of interest, a project that is not submitted, or a pair that exists.
+- **Dry run**: a fresh design that ignores existing reviews and issues nothing.
+
+Judges are invited by email on the settings page with the tracks they judge (none ticked means all). The judging context is track-scoped: a judge is assigned, opens in the console, and scores only projects in their tracks, and reads only their own scores. The public gallery stays public to everyone, judges included.
 
 The run report prints the load histogram, coverage, component count, articulation judges, the seed, the number of assigned pairs that break a conflict rule (measured from the pairs, not assumed), and a hand-checkable lower bound: a track with 6 projects and 3 eligible judges needs someone at load at least 6 for coverage 3, and a connected design needs at least 7. When the reviews do not divide evenly among the eligible judges, the connected bound equals the first bound, because a judge below it can take the bridging review. Dry runs and top-ups are written to the audit chain. The imported fixture is not that design. It is the fixture's own reviews, max load 11, and we do not invent a batch history for it. The dry-run button computes a fresh design without issuing it.
 
 ## Scores CSV
 
-Columns, frozen: `id, judge_id, project_id, track, c_functionality, c_quality, c_innovation, weighted_total, comment, state, counted, excluded_reason, merged_into, audit_seq`.
+Columns: `id, judge_id, project_id, track`, one `c_<key>` per criterion in rubric order (on evt_01 `c_functionality, c_quality, c_innovation`), then `weighted_total, comment, state, counted, excluded_reason, merged_into, audit_seq`.
 
 Empty comments are empty strings. `counted` is `true` or `false`. The file does not contain the literal `null`. Text cells that start with `= + - @`, tab or carriage return get a leading quote. Numeric columns do not.

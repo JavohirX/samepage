@@ -16,17 +16,27 @@ All three go through one view class (`SamepageView`), one `policy.allows` check,
 4. The service builds the rows.
 5. The renderer. Errors are plain Django responses. A DRF response on a `.csv` route would be re-rendered as CSV and become a 500, which fails `run.py`.
 
-Writes use the same view. The suffix, if any, picks the response. Otherwise a form body gets a 303 or a re-rendered form, and a JSON body gets 201 or problem+json. The deadline is checked before field validation, so a closed event returns 409 even when the JSON is missing fields. Malformed JSON is 400.
+Writes use the same view. The suffix, if any, picks the response. Otherwise a form body gets a 303 to the page that shows the result, and a JSON body gets 200 or 201 with a `Location`, or problem+json with an `errors` object per field. API routes never redirect. The deadline is checked before field validation, so a closed event returns 409 even when the JSON is missing fields. Malformed JSON is 400. DRF's own content negotiation is replaced by one that never answers 406, because the view chooses the format.
+
+A view declares `action` (what reading the URL needs) and, where a POST needs more, `write_action`; `SamepageView.initial` checks the one that applies before the handler runs. Object-level rules (a member of this team, an assignment of this judge, a draft of this team) are checked in the service before the row is returned or written.
+
+## Routes
+
+- Accounts: `/signup`, `/login`, `/logout`, `/password/<token>` (one-time link), `/account` (roles, change password).
+- Events: `/e` (list; POST creates, admins), `/e/new`, `/e/<event>`, `/e/<event>/settings`, `/e/<event>/state`, `/e/<event>/criteria`, `/e/<event>/people`.
+- Teams: `/e/<event>/teams`, `/e/<event>/teams/<team>` with `/invites`, `/invites/<id>/revoke`, `/leave`, `/members/<person>/remove`; `/join/<token>`.
+- Submissions: `/e/<event>/projects` (gallery; POST creates a draft), `/projects/new`, `/projects/<id>` (GET; POST or PATCH edits), `/edit`, `/submit`, `/withdraw`, `/media`, `/media/<n>`, `/media/<n>/delete`.
+- Judging: `/e/<event>/judge/batches`, `/judge/assignments/<id>` with `/scores` and `/finalize`, `/judges/me/scores`, `/judges/<id>/scores`, `/assignments`, `/assignments/<judge>/<project>/unlock`, `/assignment-runs`, `/batches/<id>/abandon`, `/progress`, `/scores`, `/results`, `/publish`, `/normalization`, `/duplicates`, `/audit`.
 
 ## Layers
 
 - `samepage/domain/` — fractions, state machines, the deadline clock message, CSV guarding, canonical JSON. No Django.
 - `samepage/engine/` — Woodbury profile REML, z-scores, k=10, rank draws, bipartite assignment. Numpy only.
-- `samepage/services/` — the only writers. Audit appends, the importer, duplicate decisions, snapshots.
+- `samepage/services/` — the only writers. `accounts`, `events`, `teams`, `submissions`, `judging`, `duplicates`, `results` (snapshots, freshness, publish), `ledger` (the rows behind every number), `audit`, the importer (`seed`), and `guards` (the publish freeze).
 - `samepage/apps/portal/` — models and the resource views.
 - `samepage/core/` — the view base, auth, renderers, errors, policy tables, headers.
 
-`APPEND_SLASH` is off. There is no Django admin and no browsable API, because both redirect, and `run.py` would follow a 302 into a 200.
+`APPEND_SLASH` is off. There is no Django admin and no browsable API, because both redirect, and `run.py` would follow a 302 into a 200. The first admin of a production instance comes from `manage.py samepage_admin` (OPERATIONS.md); everything after that is in the portal.
 
 ## Readiness
 
