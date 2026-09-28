@@ -445,7 +445,8 @@ def manual(event_id: str, *, actor: str, body: dict) -> AssignmentRun:
         report={},
     )
     issued = _issue(event_id, run, [(project_id, judge_id)], "manual")
-    run.report = {"assignments": issued, "coi_violations": 0}
+    # The checks above refuse a conflicted pair; the run page still measures it from the pair.
+    run.report = {"assignments": issued}
     run.save(update_fields=["report"])
     audit.append(event_id, actor, "assignment.manual", run.id, None, {"assignments": [f"{project_id}:{judge_id}"]})
     return run

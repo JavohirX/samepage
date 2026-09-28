@@ -241,14 +241,17 @@ def _demo_batches(fixture: dict) -> None:
 
     The fixture's judges have finished (or abandoned) their batches, so on a fresh volume
     Judge A and Judge B would have nothing left to do. Each gets two projects in their own
-    tracks that they have not reviewed, fewest reviews first. Nothing is scored for them.
-    The run is kind "manual", named run_demo, and audited like any other assignment.
+    tracks that they have not reviewed and whose team they are not on, fewest reviews first.
+    Nothing is scored for them. The run is kind "manual", named run_demo, and audited like any
+    other assignment; its run page measures conflicts from the pairs, like every run.
     """
     from collections import Counter
 
     reviews = Counter(score["project"] for score in fixture["scores"])
     scored = {(score["judge"], score["project"]) for score in fixture["scores"]}
     judge_tracks = {row["id"]: set(row.get("tracks") or []) for row in fixture["judges"]}
+    judge_email = {row["id"]: row.get("email", "").lower() for row in fixture["judges"]}
+    team_emails = {row["id"]: {email.lower() for email in row.get("members") or []} for row in fixture["teams"]}
     projects = {row["id"]: row for row in fixture["projects"]}
     active = set(
         Submission.objects.filter(event_id="evt_01", state="submitted").values_list("id", flat=True)
@@ -270,6 +273,7 @@ def _demo_batches(fixture: dict) -> None:
                 if project_id in active
                 and row["track"] in judge_tracks.get(judge_id, set())
                 and (judge_id, project_id) not in scored
+                and judge_email.get(judge_id) not in team_emails.get(row["team"], set())
             ),
             key=lambda project_id: (reviews[project_id], project_id),
         )[:2]
@@ -281,7 +285,8 @@ def _demo_batches(fixture: dict) -> None:
         for project_id in candidates:
             Assignment.objects.create(batch=batch, judge_id=judge_id, submission_id=project_id, source="manual")
             issued.append({"project_id": project_id, "judge_id": judge_id})
-    run.report = {"assignments": issued, "coi_violations": 0}
+    # No conflict count is stored: the run page measures it from the issued pairs.
+    run.report = {"assignments": issued}
     run.save(update_fields=["report"])
     audit.append(
         "evt_01",

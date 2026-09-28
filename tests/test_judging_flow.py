@@ -17,7 +17,9 @@ from django.utils import timezone
 from conftest import needs_db
 from samepage.apps.portal.models import (
     Assignment,
+    AssignmentRun,
     AuditEvent,
+    Coi,
     Event,
     Person,
     ResultsSnapshot,
@@ -54,6 +56,37 @@ def test_the_demo_judges_have_open_work_on_a_fresh_seed(client, bearer):
             assert client.get(f"/e/evt_01/judge/assignments/{row['project_id']}.json", **bearer(slug)).status_code == 200
     audit = AuditEvent.objects.get(event_id="evt_01", object_ref="run_demo")
     assert audit.after["demo"] is True
+
+
+def _run_rows(client, bearer, run_id: str) -> dict:
+    response = client.get(f"/e/evt_01/assignment-runs/{run_id}.json", **bearer("org"))
+    assert response.status_code == 200, response.content
+    return {row["key"]: row["value"] for row in response.json()["items"]}
+
+
+def test_demo_and_manual_runs_measure_conflicts_instead_of_storing_zero(client, bearer):
+    assert "coi_violations" not in AssignmentRun.objects.get(id="run_demo").report
+    assert _run_rows(client, bearer, "run_demo")["coi_violations"] == 0
+    # Declare a conflict on the team of one of jdg_08's demo projects: the same page now counts it.
+    assignment = Assignment.objects.filter(batch__run_id="run_demo", judge_id="jdg_08").select_related("submission").first()
+    Coi.objects.create(judge_id="jdg_08", team_id=assignment.submission.team_id, reason="test")
+    assert _run_rows(client, bearer, "run_demo")["coi_violations"] == 1
+
+    free = (
+        Submission.objects.filter(event_id="evt_01", track_id__in=["trk_04", "trk_05"], state="submitted")
+        .exclude(assignments__judge_id="jdg_03")
+        .order_by("id")
+        .first()
+    )
+    created = client.post(
+        "/e/evt_01/assignments.json", {"judge": "jdg_03", "project": free.id}, content_type="application/json", **bearer("org")
+    )
+    assert created.status_code == 201, created.content
+    run_id = created.json()["id"]
+    assert "coi_violations" not in AssignmentRun.objects.get(id=run_id).report
+    assert _run_rows(client, bearer, run_id)["coi_violations"] == 0
+    Coi.objects.create(judge_id="jdg_03", team_id=free.team_id, reason="declared after the assignment")
+    assert _run_rows(client, bearer, run_id)["coi_violations"] == 1
 
 
 def test_manual_assignment_enforces_track_conflict_and_uniqueness(client, bearer):
