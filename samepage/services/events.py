@@ -7,17 +7,20 @@ from __future__ import annotations
 
 import re
 import secrets
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal, InvalidOperation
 
+from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 
 from samepage.apps.portal.models import (
     Assignment,
     Criterion,
     Event,
+    Invite,
     JudgeTrack,
     Person,
     PrizeCategory,
@@ -603,13 +606,51 @@ def people_payload(event_id: str) -> dict:
                 "finalized": done,
                 "open": (assigned - done) if grant.role == "judge" else "",
                 "can_sign_in": "true" if person.has_usable_password() else "false",
+                "status": "active",
+                "invite_expires": "",
+            }
+        )
+    # Offers to existing accounts that have not been accepted yet. They hold no role until then.
+    now = timezone.now()
+    pending = (
+        Invite.objects.filter(kind="role", event_id=event_id, revoked_at__isnull=True, uses=0, expires_at__gt=now)
+        .select_related("person")
+        .order_by("role", "person__email")
+    )
+    for invite in pending:
+        person = invite.person
+        items.append(
+            {
+                "person_id": person.id,
+                "name": person.name,
+                "email": person.email,
+                "role": invite.role,
+                "tracks": " ".join(invite.tracks) if invite.role == "judge" else "",
+                "assigned": "",
+                "finalized": "",
+                "open": "",
+                "can_sign_in": "true" if person.has_usable_password() else "false",
+                "status": "invited",
+                "invite_expires": stamp(invite.expires_at),
             }
         )
     return {
         "title": "People",
         "event": event_id,
         "resource": "people",
-        "columns": ["person_id", "name", "email", "role", "tracks", "assigned", "finalized", "open", "can_sign_in"],
+        "columns": [
+            "person_id",
+            "name",
+            "email",
+            "role",
+            "tracks",
+            "assigned",
+            "finalized",
+            "open",
+            "can_sign_in",
+            "status",
+            "invite_expires",
+        ],
         "items": items,
         "count": len(items),
         "tracks": list(Track.objects.filter(event_id=event_id).order_by("id").values("id", "name")),
@@ -619,9 +660,63 @@ def people_payload(event_id: str) -> dict:
     }
 
 
+ROLE_INVITE_DAYS = 14
+
+
+def _is_fresh_account(person: Person, created: bool) -> bool:
+    """An account nobody has used: this invite just created it, or it never had a password and holds
+    no role and no team anywhere. Such an account is only reachable through the set-password link
+    this organizer hands out, so granting the role at once gives it to nobody else."""
+    if created:
+        return True
+    if person.is_admin or person.has_usable_password():
+        return False
+    return not (
+        RoleGrant.objects.filter(person=person).exists() or TeamMember.objects.filter(person=person).exists()
+    )
+
+
+def _grant(event: Event, person: Person, role: str, tracks: list[str]) -> bool:
+    _row, granted = RoleGrant.objects.get_or_create(person=person, event=event, role=role)
+    if role == "judge":
+        JudgeTrack.objects.filter(person=person, event=event).delete()
+        for track in sorted(set(tracks)):
+            JudgeTrack.objects.create(person=person, event=event, track_id=track)
+    return granted
+
+
+def _issue_role_invite(event: Event, person: Person, role: str, tracks: list[str], actor: Person) -> tuple[Invite, str]:
+    """A one-time link that offers `person` the role. Earlier unused offers of it stop working."""
+    now = timezone.now()
+    Invite.objects.filter(
+        kind="role", event=event, person=person, role=role, revoked_at__isnull=True, uses=0
+    ).update(revoked_at=now)
+    token = "ra_" + secrets.token_urlsafe(24)
+    invite = Invite.objects.create(
+        id="inv_" + secrets.token_hex(5),
+        kind="role",
+        event=event,
+        person=person,
+        role=role,
+        tracks=sorted(set(tracks)) if role == "judge" else [],
+        token_sha256=accounts.digest(token),
+        expires_at=now + timedelta(days=ROLE_INVITE_DAYS),
+        max_uses=1,
+        created_by=actor.id,
+    )
+    return invite, f"{settings.PUBLIC_URL.rstrip('/')}/accept/{token}"
+
+
 @transaction.atomic
 def add_person(event_id: str, actor: Person, body: dict) -> dict:
-    """Invite a judge or an organizer by email. A new person gets a one-time password link."""
+    """Invite a judge or an organizer by email.
+
+    A new address gets an account with no password and a one-time set-password link; the role comes
+    with it, because only that link can ever sign the account in. An address that already has an
+    account gets nothing yet: the organizer receives a one-time acceptance link, and the role is
+    granted when the owner of that account, signed in, accepts it. Anyone can sign up with any
+    address, so an existing account is never proof that its holder is the person being invited.
+    """
     event = Event.objects.select_for_update().filter(id=event_id).first()
     if event is None:
         raise NotFound("Unknown event.")
@@ -640,30 +735,43 @@ def add_person(event_id: str, actor: Person, body: dict) -> dict:
         raw_tracks = event_tracks
     if not isinstance(raw_tracks, list) or not all(isinstance(t, str) and t in event_tracks for t in raw_tracks):
         raise Unprocessable({"tracks": "Choose tracks of this event."})
+    tracks = sorted(set(raw_tracks)) if role == "judge" else []
     person, created = accounts.ensure_person(email, name)
     if TeamMember.objects.filter(event=event, person=person).exists():
         raise Conflict(f"{email} is on a team in this event, so they cannot be a {role} here.")
     if not person.is_active:
         raise Conflict(f"{email} is deactivated.")
-    grant, granted = RoleGrant.objects.get_or_create(person=person, event=event, role=role)
-    if role == "judge":
-        JudgeTrack.objects.filter(person=person, event=event).delete()
-        for track in sorted(set(raw_tracks)):
-            JudgeTrack.objects.create(person=person, event=event, track_id=track)
+    already = RoleGrant.objects.filter(person=person, event=event, role=role).exists()
+    granted = False
     link = ""
-    if _may_set_password(person, event_id):
+    accept_link = ""
+    invite_id = ""
+    if already:
+        # The same role again only changes a judge's tracks.
+        _grant(event, person, role, tracks)
+        status = "active"
+    elif _is_fresh_account(person, created):
+        granted = _grant(event, person, role, tracks)
+        status = "active"
+    else:
+        invite, accept_link = _issue_role_invite(event, person, role, tracks, actor)
+        invite_id = invite.id
+        status = "invited"
+    if status == "active" and _may_set_password(person, event_id):
         link = accounts.issue_password_link(person, actor=actor.id, event_id=event_id)
     audit.append(
         event_id,
         actor.id,
-        f"people.add_{role}",
+        f"people.add_{role}" if status == "active" else f"people.invite_{role}",
         person.id,
         None,
         {
             "email": email,
             "role": role,
-            "tracks": sorted(set(raw_tracks)) if role == "judge" else [],
+            "tracks": tracks,
             "new_account": created,
+            "status": status,
+            "invite": invite_id,
             "password_link_issued": bool(link),
         },
     )
@@ -671,12 +779,78 @@ def add_person(event_id: str, actor: Person, body: dict) -> dict:
         "person_id": person.id,
         "email": person.email,
         "role": role,
-        "tracks": sorted(set(raw_tracks)) if role == "judge" else [],
+        "tracks": tracks,
         "new_account": created,
         "granted": granted,
-        # Shown once. Only its sha256 is stored.
+        # active: the role is held now. invited: it is held once the account's owner accepts accept_link.
+        "status": status,
+        # Shown once. Only their sha256 is stored.
         "password_link": link,
+        "accept_link": accept_link,
     }
+
+
+def _live_role_invite(token: str, *, lock: bool = False) -> Invite:
+    rows = Invite.objects.filter(kind="role", token_sha256=accounts.digest(token)).select_related("person", "event")
+    if lock:
+        rows = rows.select_for_update(of=("self",))
+    invite = rows.first()
+    if invite is None or invite.revoked_at is not None or invite.uses >= invite.max_uses:
+        raise NotFound("This link is not valid. Ask the organizer for a new one.")
+    if invite.expires_at <= timezone.now():
+        raise NotFound("This link has expired. Ask the organizer for a new one.")
+    return invite
+
+
+def role_invite_preview(token: str, principal: Person | None) -> dict:
+    invite = _live_role_invite(token)
+    names = dict(Track.objects.filter(event=invite.event).values_list("id", "name"))
+    return {
+        "title": f"{invite.role.capitalize()} invitation",
+        "event": invite.event_id,
+        "resource": "role-invite",
+        "event_name": invite.event.name,
+        "role": invite.role,
+        "tracks": [names.get(track, track) for track in invite.tracks],
+        "email": invite.person.email,
+        "expires_at": stamp(invite.expires_at),
+        "signed_in_as": principal.email if principal is not None else "",
+        "is_invitee": bool(principal is not None and principal.id == invite.person_id),
+        "columns": [],
+        "items": [],
+        "count": 0,
+        "html_omitted": {},
+    }
+
+
+@transaction.atomic
+def accept_role_invite(token: str, principal: Person) -> dict:
+    """The invited account, signed in, takes the role it was offered."""
+    invite = _live_role_invite(token, lock=True)
+    if invite.person_id != principal.id:
+        # The link reached the owner of another account. Say which, so they can sign in as it.
+        raise PermissionDenied(f"This invitation is for {invite.person.email}. Sign in as that account to accept it.")
+    event = Event.objects.select_for_update().get(id=invite.event_id)
+    if invite.role == "judge":
+        refuse_if_published(event)
+    if TeamMember.objects.filter(event=event, person=principal).exists():
+        raise Conflict("You are on a team in this event, so you cannot also be a judge or organizer here.")
+    if not principal.is_active:
+        raise Conflict("This account is deactivated.")
+    known = set(event.tracks.values_list("id", flat=True))
+    tracks = [track for track in invite.tracks if track in known]
+    granted = _grant(event, principal, invite.role, tracks)
+    invite.uses += 1
+    invite.save(update_fields=["uses"])
+    audit.append(
+        event.id,
+        principal.id,
+        f"people.accept_{invite.role}",
+        principal.id,
+        None,
+        {"invite": invite.id, "role": invite.role, "tracks": tracks, "granted": granted},
+    )
+    return {"event": event.id, "role": invite.role, "tracks": tracks, "granted": True}
 
 
 def _may_set_password(person: Person, event_id: str) -> bool:

@@ -739,6 +739,23 @@ class JoinView(SamepageView):
         )
 
 
+class AcceptRoleView(SamepageView):
+    """A judge or organizer role offered to an existing account. GET: what the link offers.
+    POST: the invited account, signed in, accepts it; any other account is refused."""
+
+    formats = ("html", "json")
+    write_action = "role.accept"
+
+    def get(self, request, token, fmt=None):
+        payload = events.role_invite_preview(token, request.principal)
+        payload["path"] = f"/accept/{token}"
+        return render_payload(request, payload, fmt, template="accept.html")
+
+    def post(self, request, token, fmt=None):
+        result = events.accept_role_invite(token, request.principal)
+        return _done(request, fmt, html_to="/account", payload=result, status=200, location=f"/e/{result['event']}.json")
+
+
 class SignupView(SamepageView):
     """Create an account. HTML only, like /login: it starts a browser session."""
 

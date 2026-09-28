@@ -22,6 +22,7 @@ urlpatterns += [path("signup", views.SignupView.as_view(), name="signup")]
 urlpatterns += [path("password/<slug:token>", views.PasswordLinkView.as_view(), name="password-link")]
 urlpatterns += fpath("account", views.AccountView, "account")
 urlpatterns += fpath("join/<slug:token>", views.JoinView, "join")
+urlpatterns += fpath("accept/<slug:token>", views.AcceptRoleView, "accept-role")
 urlpatterns += [path("demo/enter/<slug:slug>", views.DemoEnterView.as_view(), name="demo-enter")]
 urlpatterns += fpath("about/access", views.AccessView, "access")
 urlpatterns += fpath("e", views.HomeView, "events")

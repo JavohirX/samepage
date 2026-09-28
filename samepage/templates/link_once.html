@@ -7,12 +7,18 @@
 <p><input readonly value="{{ r.url }}" aria-label="Invite link" data-field="url"></p>
 <p class="meta">Expires {{ r.expires_at }} UTC · up to {{ r.max_uses }} uses. <a href="/e/{{ event_id }}/teams/{{ r.team }}">Back to the team</a></p>
 {% else %}
+{% if r.accept_link %}
+<p>{{ r.email }} already has an account, so they are <strong>not</strong> a {{ r.role }} yet. Send them this one-time link; the role is granted when they open it signed in to that account and accept. It is shown <strong>once</strong>.</p>
+<p><input readonly value="{{ r.accept_link }}" aria-label="Acceptance link" data-field="accept_link"></p>
+<p class="meta">Anyone can create an account with any email address, so an existing account is not proof that it belongs to the person you mean. Until it is accepted, the people list shows the invitation as not accepted.</p>
+{% else %}
 {% if r.email %}<p>{{ r.email }} is now a <strong>{{ r.role }}</strong>{% if r.tracks %} for {{ r.tracks|join:", " }}{% endif %}.</p>{% endif %}
 {% if r.password_link %}
 <p>This person has no password yet. Send them this one-time link to choose one. It is shown <strong>once</strong>.</p>
 <p><input readonly value="{{ r.password_link }}" aria-label="Set-password link" data-field="password_link"></p>
 {% else %}
-<p class="meta">They already have a password and can sign in now.</p>
+<p class="meta">They sign in with the account they already have.</p>
+{% endif %}
 {% endif %}
 <p><a href="/e/{{ event_id }}/settings#people">Back to the event</a></p>
 {% endif %}

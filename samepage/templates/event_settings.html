@@ -70,12 +70,14 @@
   <h2>Judges and organizers</h2>
   <div class="overflow-auto">
   <table>
-    <thead><tr><th>Person</th><th>Role</th><th>Tracks</th><th>Assigned</th><th>Done</th><th>Can sign in</th><th></th></tr></thead>
+    <thead><tr><th>Person</th><th>Role</th><th>Status</th><th>Tracks</th><th>Assigned</th><th>Done</th><th>Can sign in</th><th></th></tr></thead>
     <tbody>
     {% for p in payload.people %}{% if p.role != "participant" %}
     <tr>
-      <td>{{ p.name }} <span class="id">{{ p.email }}</span></td><td>{{ p.role }}</td><td>{{ p.tracks }}</td><td>{{ p.assigned }}</td><td>{{ p.finalized }}</td><td>{{ p.can_sign_in }}</td>
-      <td>{% if p.can_sign_in == "false" %}<form method="post" action="/e/{{ payload.id }}/people/{{ p.person_id }}/password-link">{% csrf_token %}<button class="outline" type="submit">New password link</button></form>{% endif %}</td>
+      <td>{{ p.name }} <span class="id">{{ p.email }}</span></td><td>{{ p.role }}</td>
+      <td>{% if p.status == "invited" %}invited, not accepted (link expires {{ p.invite_expires }} UTC){% else %}{{ p.status }}{% endif %}</td>
+      <td>{{ p.tracks }}</td><td>{{ p.assigned }}</td><td>{{ p.finalized }}</td><td>{{ p.can_sign_in }}</td>
+      <td>{% if p.can_sign_in == "false" and p.status == "active" %}<form method="post" action="/e/{{ payload.id }}/people/{{ p.person_id }}/password-link">{% csrf_token %}<button class="outline" type="submit">New password link</button></form>{% endif %}</td>
     </tr>
     {% endif %}{% endfor %}
     </tbody>
@@ -95,6 +97,6 @@
     </fieldset>
     <button type="submit">Add</button>
   </form>
-  <p class="meta">A new person gets a one-time link to choose a password (shown once, on the next page). Nothing is emailed; this portal runs offline. Participants join through their team's invite link.</p>
+  <p class="meta">A new person gets a one-time link to choose a password (shown once, on the next page). An email that already has an account gets a one-time acceptance link instead: the role is theirs only after they sign in to that account and accept it, because anyone can sign up with any address. Nothing is emailed; this portal runs offline. Participants join through their team's invite link.</p>
 </section>
 {% endblock %}

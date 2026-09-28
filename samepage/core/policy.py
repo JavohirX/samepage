@@ -29,6 +29,7 @@ ACTION_POLICY = {
     "team.read": {PARTICIPANT, ORGANIZER, ADMIN},
     "team.manage": {PARTICIPANT, ORGANIZER, ADMIN},
     "invite.accept": {VISITOR, PARTICIPANT},
+    "role.accept": EVERYONE,
     "submission.create": {PARTICIPANT},
     "submission.update": {PARTICIPANT},
     "submission.withdraw": {PARTICIPANT, ORGANIZER, ADMIN},
@@ -51,7 +52,7 @@ ACTION_POLICY = {
 
 # These need a signed-in person even where the role column says visitor: a visitor who is
 # signed in may start or join a team, an anonymous one is asked to sign in (401).
-SIGNED_IN = {"account.manage", "team.create", "invite.accept"}
+SIGNED_IN = {"account.manage", "team.create", "invite.accept", "role.accept"}
 
 # Role × field → hidden. Blind mode adds team identity for judges at runtime.
 FIELD_POLICY = {
@@ -143,6 +144,7 @@ _NOTES = {
     "team.read": "The team page: members of that team and organizers. Other participants get 403.",
     "team.manage": "Invite links (create, revoke) for members of that team; removing a member is organizers only.",
     "invite.accept": "A signed-in person with the secret link joins the team. Judges and organizers of the event cannot.",
+    "role.accept": "A judge or organizer role offered to an existing account is granted only when that account, signed in, opens the one-time link and accepts. Any other account is refused.",
     "scores.read_own": "A judge reads their own rows. A participant is refused before 'me' is resolved.",
     "scores.read_named": "A judge may open only their own id. Anyone else who is not staff is refused before the id is loaded, so the answer is 403 rather than 404.",
     "scores.read_ledger": "The full ledger, including excluded duplicate rows and drafts (counted=false).",

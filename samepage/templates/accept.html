@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>{{ payload.title }}</h1>
+<p>This link offers the account <strong>{{ payload.email }}</strong> the <strong>{{ payload.role }}</strong> role in <strong>{{ payload.event_name }}</strong>{% if payload.tracks %}, judging {{ payload.tracks|join:", " }}{% endif %}. It works once and expires {{ payload.expires_at }} UTC.</p>
+{% if payload.is_invitee %}
+<form method="post" action="{{ payload.path }}">{% csrf_token %}<button type="submit">Accept as {{ payload.email }}</button></form>
+{% elif payload.signed_in_as %}
+<p class="banner">You are signed in as {{ payload.signed_in_as }}. Only {{ payload.email }} can accept: sign out, then sign in as that account and open this link again.</p>
+{% else %}
+<p><a href="/login?next={{ payload.path|urlencode }}" role="button">Sign in as {{ payload.email }}</a></p>
+<p class="meta">If you cannot sign in to that account, for example because someone else registered your address, do not accept: tell the organizer, who can invite a different address.</p>
+{% endif %}
+{% endblock %}

@@ -183,11 +183,13 @@ class TeamMember(models.Model):
 
 class Invite(models.Model):
     """A secret link. `team`: joins a team. `password`: sets the password of an account an organizer created.
+    `role`: offers an existing account a judge or organizer role on `event`; the role is granted only
+    when that account, signed in, accepts it.
 
     Only the sha256 of the token is stored. The link is shown once, to the person who made it.
     """
 
-    KINDS = ("team", "password")
+    KINDS = ("team", "password", "role")
     id = models.TextField(primary_key=True)
     kind = models.TextField(default="team")
     event = models.ForeignKey(Event, null=True, blank=True, on_delete=models.CASCADE, related_name="invites")
@@ -200,14 +202,24 @@ class Invite(models.Model):
     uses = models.PositiveIntegerField(default=0)
     created_by = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(default=timezone.now)
+    # kind=role only: the role offered and, for a judge, the tracks they will judge.
+    role = models.TextField(blank=True, default="")
+    tracks = models.JSONField(default=list, blank=True)
 
     class Meta:
         db_table = "invite"
         constraints = [
             models.CheckConstraint(condition=Q(uses__lte=models.F("max_uses")), name="invite_uses_cap"),
-            models.CheckConstraint(condition=Q(kind__in=("team", "password")), name="invite_kind"),
+            models.CheckConstraint(condition=Q(kind__in=("team", "password", "role")), name="invite_kind"),
             models.CheckConstraint(
-                condition=(Q(kind="team") & Q(team__isnull=False)) | (Q(kind="password") & Q(person__isnull=False)),
+                condition=(Q(kind="team") & Q(team__isnull=False))
+                | (Q(kind="password") & Q(person__isnull=False))
+                | (
+                    Q(kind="role")
+                    & Q(person__isnull=False)
+                    & Q(event__isnull=False)
+                    & Q(role__in=("judge", "organizer"))
+                ),
                 name="invite_target",
             ),
         ]

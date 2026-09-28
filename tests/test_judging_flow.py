@@ -277,13 +277,17 @@ def test_a_judge_invited_by_email_sets_a_password_and_scores(client, bearer):
 
 
 def test_an_organizer_cannot_take_over_an_account_from_another_event(client, bearer):
-    # jdg_05 judges evt_01 and has never set a password. The evt_02 organizer adds them as a judge:
-    # the role is granted, but no set-password link is handed out for an account that lives elsewhere.
+    # jdg_05 judges evt_01 and has never set a password. The evt_02 organizer invites them as a judge:
+    # the account lives elsewhere, so it gets an acceptance link, no role yet, and no set-password link.
     added = client.post(
         "/e/evt_02/people.json", {"email": Person.objects.get(id="jdg_05").email, "role": "judge"}, content_type="application/json", **bearer("org")
     )
-    assert added.status_code == 201 and added.json()["password_link"] == ""
-    assert client.post("/e/evt_02/people/jdg_05/password-link.json", **bearer("org")).status_code == 409
+    assert added.status_code == 201
+    body = added.json()
+    assert body["password_link"] == "" and body["status"] == "invited" and "/accept/ra_" in body["accept_link"]
+    assert not RoleGrant.objects.filter(person_id="jdg_05", event_id="evt_02").exists()
+    # Not on evt_02, so there is nobody there to hand a password link for.
+    assert client.post("/e/evt_02/people/jdg_05/password-link.json", **bearer("org")).status_code == 404
     assert client.post("/e/evt_01/people/adm_01/password-link.json", **bearer("org")).status_code == 409
 
 
