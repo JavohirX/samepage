@@ -120,4 +120,8 @@ _NOTES = {
     "scores.read_ledger": "The full ledger, including excluded duplicate rows.",
     "results.read": "Staff before publish. Everyone after publish.",
     "submission.create": "Refused with 409 once the event's close instant has passed. The body is not validated first.",
+    "submission.update": "Policy row only. No route edits a submission in this build.",
+    "submission.withdraw": "Policy row only. No route withdraws a submission in this build.",
+    "event.manage": "Policy row only. No route creates or edits an event in this build.",
+    "invite.accept": "Policy row only. No invite route exists in this build.",
 }

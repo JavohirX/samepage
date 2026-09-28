@@ -323,15 +323,23 @@ def _lojo(reviews, weights, projects, top5: list[str]) -> list[dict]:
 
 def _flags(reviews, projects_meta, z_rows, judges_present, n_reviews) -> dict:
     per_judge = defaultdict(int)
+    values_by_judge: dict[str, set] = defaultdict(set)
     for review in reviews:
         per_judge[review["judge_id"]] += 1
-    straight = [row["judge_id"] for row in z_rows if row["reason"] == "sd=0"]
+        values_by_judge[review["judge_id"]].update(review["criteria"].values())
+    # Straight line: one value on every criterion of every review (4/4/4, 4/4/4). A judge whose
+    # totals merely repeat (3/5/3 and 5/4/2 both total 11/3) is flagged separately, not as this.
+    straight = sorted(
+        judge for judge, values in values_by_judge.items() if per_judge[judge] >= 2 and len(values) == 1
+    )
+    flat_totals = sorted(row["judge_id"] for row in z_rows if row["reason"] == "sd=0")
     zero = sorted(judges_present - set(per_judge))
     one = sorted(judge for judge, n in per_judge.items() if n == 1)
     few = sorted(set(zero) | {judge for judge, n in per_judge.items() if n <= 2})
     short = sorted(project for project, n in n_reviews.items() if n < 3)
     return {
         "straight_line": straight,
+        "no_total_variance": flat_totals,
         "zero_counted": zero,
         "one_counted": one,
         "at_most_two": few,

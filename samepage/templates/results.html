@@ -6,7 +6,7 @@
   <p class="tools"><a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a></p>
 </header>
 <p>{{ payload.story }}</p>
-{% if payload.degraded %}<p class="banner">{{ payload.banner }}</p>{% else %}<p class="banner">{{ payload.banner }}</p>{% endif %}
+<p class="banner">{{ payload.banner }}</p>
 <p class="meta">method <data data-field="method" value="{{ payload.method }}">{{ payload.method }}</data>
   · λ <data data-field="lambda" value="{{ payload.lambda }}">{{ payload.lambda }}</data>
   · ranking <data data-field="ranking_sha256" value="{{ payload.ranking_sha256 }}">{{ payload.ranking_sha256 }}</data>

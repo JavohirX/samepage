@@ -8,7 +8,7 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
-from samepage.apps.portal.models import Event, Person, ResultsSnapshot, Submission
+from samepage.apps.portal.models import Event, Person, ResultsSnapshot, RoleGrant
 from samepage.core.errors import Conflict
 from samepage.engine.snapshot import build_snapshot
 from samepage.services import audit
@@ -39,6 +39,10 @@ def rebuild(event_id: str, *, actor: str = "engine", cause: int | None = None) -
     seq = 1 if previous is None else previous.seq + 1
     reviews, meta = counted_for_engine(event_id)
     weights = weights_for(event_id)
+    # Every judge on the event, so a judge with no counted review is flagged rather than invisible.
+    present = list(
+        RoleGrant.objects.filter(event_id=event_id, role="judge").values_list("person_id", flat=True)
+    )
     method = "reml"
     payload: dict
     if budget <= 0:
@@ -46,7 +50,9 @@ def rebuild(event_id: str, *, actor: str = "engine", cause: int | None = None) -
         method = "raw_fallback"
     else:
         try:
-            snapshot = build_snapshot(reviews, meta, weights, with_lojo=True, with_draws=True)
+            snapshot = build_snapshot(
+                reviews, meta, weights, with_lojo=True, with_draws=True, judges_present=present
+            )
             if time.perf_counter() - started > budget:
                 payload = _fallback(reviews, meta, "over budget")
                 method = "raw_fallback"
@@ -141,6 +147,7 @@ def _rows(event_id: str) -> tuple[ResultsSnapshot | None, list[dict]]:
 def results_payload(event_id: str) -> dict:
     snapshot, rows = _rows(event_id)
     payload = snapshot.payload if snapshot else {}
+    short = set((payload.get("flags") or {}).get("short_projects") or [])
     items = []
     for row in rows:
         items.append(
@@ -159,7 +166,7 @@ def results_payload(event_id: str) -> dict:
                 "track_rank": row.get("track_rank") or "",
                 "track": row.get("track", ""),
                 "method": (snapshot.method if snapshot else ""),
-                "flags": "",
+                "flags": "short" if row["id"] in short else "",
             }
         )
     story = (
@@ -198,7 +205,7 @@ def results_payload(event_id: str) -> dict:
         "count": len(items),
         "download_csv": f"/e/{event_id}/results.csv",
         "download_json": f"/e/{event_id}/results.json",
-        "html_omitted": {"flags": "per-project flag text lives on the lab page"},
+        "html_omitted": {"flags": "short (fewer than 3 counted reviews) is in the CSV and JSON; judge flags are on the lab page"},
         "published": Event.objects.filter(id=event_id, state="published").exists(),
     }
 
@@ -310,6 +317,10 @@ def lab_payload(event_id: str, table: str | None = None) -> dict:
         "lojo": lojo,
         "limits": limits,
         "flags": payload.get("flags") or {},
+        "flag_rows": [
+            {"flag": key, "who": " ".join(value)}
+            for key, value in sorted((payload.get("flags") or {}).items())
+        ],
         "count": len(ablation_items),
         "download_csv": f"/e/{event_id}/normalization/ablation.csv",
         "download_json": f"/e/{event_id}/normalization.json",
@@ -338,18 +349,3 @@ def publish(event_id: str, actor: Person) -> Event:
         snapshot.cause_audit_seq = seq
         snapshot.save(update_fields=["published_at", "cause_audit_seq"])
     return event
-
-
-def rank_of(event_id: str, project_id: str) -> int | None:
-    _snapshot, rows = _rows(event_id)
-    for row in rows:
-        if row["id"] == project_id:
-            return row.get("rank")
-    return None
-
-
-def project_meta_map(event_id: str) -> dict:
-    return {
-        row.id: row
-        for row in Submission.objects.filter(event_id=event_id)
-    }

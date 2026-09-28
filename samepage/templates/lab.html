@@ -6,6 +6,7 @@
   <p>λ <data data-field="lambda" value="{{ payload.lambda }}">{{ payload.lambda }}</data>
     · Kendall τ against raw <data data-field="kendall_raw" value="{{ payload.kendall_raw }}">{{ payload.kendall_raw }}</data>
     · data-driven k <data data-field="k_data" value="{{ payload.k_data }}">{{ payload.k_data }}</data>
+    · ICC <data data-field="icc" value="{{ payload.icc }}">{{ payload.icc }}</data>
   </p>
   <p class="tools">
     <a href="/e/{{ event_id }}/normalization/ablation.csv">Ablation CSV</a>
@@ -37,6 +38,16 @@
   <tbody>
   {% for row in payload.z_failures %}
   <tr><td>{{ row.judge_id }}</td><td>{{ row.n }}</td><td>{{ row.sd }}</td><td>{{ row.reason }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h2>Flags</h2>
+<p>Flags describe the counted reviews. Nothing flagged is dropped.</p>
+<table>
+  <thead><tr><th>Flag</th><th>Who</th></tr></thead>
+  <tbody>
+  {% for row in payload.flag_rows %}
+  <tr><td>{{ row.flag }}</td><td><data data-field="{{ row.flag }}" value="{{ row.who }}">{{ row.who|default:"none" }}</data></td></tr>
   {% endfor %}
   </tbody>
 </table>

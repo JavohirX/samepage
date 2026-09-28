@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from collections import defaultdict
 
 from django.db.models import Max
@@ -191,8 +193,9 @@ def progress_payload(event_id: str) -> dict:
     )
     full = sum(1 for project_id in active if per_project[project_id] >= 3)
     short = sum(1 for project_id in active if per_project[project_id] < 3)
+    # Withdrawn by a duplicate decision, under either resolution (duplicate_of: or merged_into:).
     withdrawn = Submission.objects.filter(
-        event_id=event_id, state="withdrawn", withdrawn_reason__startswith="duplicate_of:"
+        event_id=event_id, state="withdrawn", duplicate_group__isnull=False
     ).count()
     metrics = [
         {"key": "counted", "value": counted, "label": "counted", "href": f"/e/{event_id}/scores.csv?counted=true"},
@@ -202,15 +205,12 @@ def progress_payload(event_id: str) -> dict:
         {"key": "short", "value": short, "label": "short", "href": f"/e/{event_id}/projects.csv?review=short"},
         {"key": "withdrawn_duplicate", "value": withdrawn, "label": "withdrawn duplicate", "href": f"/e/{event_id}/projects.csv?state=withdrawn"},
     ]
-    # Recount from the same row set the CSV uses. A mismatch would mean the sentence drifted.
-    recounts = {
-        "counted": count({"counted": "true"}),
-        "excluded": count({"counted": "false"}),
-        "total": count({}),
-        "fully_reviewed": full,
-        "short": short,
-        "withdrawn_duplicate": withdrawn,
-    }
+    # Each number is compared with the CSV its link downloads: the same payload builder the
+    # CSV route calls, serialised by the CSV renderer, parsed back and counted.
+    recounts = csv_recounts(event_id)
+    for metric in metrics:
+        metric["csv_rows"] = recounts[metric["key"]]
+        metric["matches_csv"] = "true" if metric["value"] == recounts[metric["key"]] else "false"
     matched = sum(1 for metric in metrics if metric["value"] == recounts[metric["key"]])
     provisional = list(
         DuplicateGroup.objects.filter(event_id=event_id, status="provisional").values_list("id", flat=True)
@@ -230,13 +230,40 @@ def progress_payload(event_id: str) -> dict:
         },
         "metrics": metrics,
         "items": metrics,
-        "columns": ["key", "value", "label", "href"],
+        "columns": ["key", "value", "label", "href", "csv_rows", "matches_csv"],
         "recount": {"matched": matched, "total": len(metrics)},
         "provisional": list(provisional),
         "batches": batch_rows(event_id),
         "download_csv": f"/e/{event_id}/progress.csv",
         "download_json": f"/e/{event_id}/progress.json",
         "html_omitted": {},
+    }
+
+
+def csv_data_rows(payload: dict) -> int:
+    """Data rows in the CSV that `payload` renders to, counted by parsing the bytes."""
+    from samepage.core.renderers import to_csv
+
+    reader = csv.reader(io.StringIO(to_csv(payload)))
+    next(reader, None)
+    return sum(1 for _row in reader)
+
+
+def csv_recounts(event_id: str) -> dict[str, int]:
+    """Row counts of the six CSV links on the progress page, as an organizer downloads them."""
+    return {
+        "counted": csv_data_rows(score_payload(event_id, {"counted": "true"})),
+        "excluded": csv_data_rows(score_payload(event_id, {"counted": "false"})),
+        "total": csv_data_rows(score_payload(event_id, {})),
+        "fully_reviewed": csv_data_rows(
+            project_rows(event_id, include_withdrawn=False, query={"review": "full"}, paginate=False)
+        ),
+        "short": csv_data_rows(
+            project_rows(event_id, include_withdrawn=False, query={"review": "short"}, paginate=False)
+        ),
+        "withdrawn_duplicate": csv_data_rows(
+            project_rows(event_id, include_withdrawn=True, query={"state": "withdrawn"}, paginate=False)
+        ),
     }
 
 
@@ -270,7 +297,7 @@ def batch_rows(event_id: str) -> list[dict]:
     return items
 
 
-def project_rows(event_id: str, *, include_withdrawn: bool, query) -> list[dict]:
+def project_rows(event_id: str, *, include_withdrawn: bool, query, paginate: bool = True) -> dict:
     rows = review_rows(event_id)
     per = defaultdict(int)
     for row in rows:
@@ -328,15 +355,20 @@ def project_rows(event_id: str, *, include_withdrawn: bool, query) -> list[dict]
         page = max(1, int(query.get("page") or 1))
     except ValueError:
         page = 1
-    start = (page - 1) * 50
-    window = items[start : start + 50]
+    # HTML and JSON are paged by 50. A CSV download is the whole list.
+    if paginate:
+        start = (page - 1) * 50
+        window = items[start : start + 50]
+    else:
+        page = 1
+        window = items
     return {
         "title": "Projects",
         "event": event_id,
         "resource": "projects",
         "count": len(items),
         "page": page,
-        "pages": max(1, (len(items) + 49) // 50),
+        "pages": max(1, (len(items) + 49) // 50) if paginate else 1,
         "columns": [
             "id",
             "title",
