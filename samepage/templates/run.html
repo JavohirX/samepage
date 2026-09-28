@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page"><h1>{{ payload.title }}</h1><p>{{ payload.kind }}</p></header>
+<table>
+  <thead><tr><th>Field</th><th>Value</th></tr></thead>
+  <tbody>
+  {% for item in items %}
+  <tr><td>{{ item.key }}</td><td>{{ item.value }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if payload.report.lower_bound %}
+<h2>Lower bound</h2>
+<ul>
+  {% for line in payload.report.lower_bound.lines %}<li>{{ line }}</li>{% endfor %}
+  {% for line in payload.report.lower_bound.connected %}<li>{{ line }}</li>{% endfor %}
+</ul>
+<p>Achieved max load {{ payload.report.achieved_max_load }}. Components {{ payload.report.components }}.</p>
+{% endif %}
+{% if payload.report.assignments %}
+<h2>New assignments</h2>
+<ul>
+  {% for row in payload.report.assignments %}
+  <li>{{ row.project_id }} → {{ row.judge_id }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

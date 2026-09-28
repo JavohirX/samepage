@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page"><h1>Your batches</h1></header>
+{% if items %}
+<ul class="events">
+  {% for item in items %}
+  <li>
+    <a href="/e/{{ event_id }}/judge/assignments/{{ item.project_id }}">{{ item.title }}</a>
+    <span class="meta">{{ item.track }} · {{ item.finalized }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>No batch assigned yet.</p>
+{% endif %}
+{% endblock %}

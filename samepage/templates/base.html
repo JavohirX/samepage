@@ -1,0 +1,60 @@
+{% load static %}
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page_title }} · Samepage</title>
+  <link rel="stylesheet" href="{% static 'pico.min.css' %}">
+  <link rel="stylesheet" href="{% static 'samepage.css' %}">
+  {% for field, reason in omitted.items %}
+  <meta name="samepage:omitted" content="{{ field }}: {{ reason }}">
+  {% endfor %}
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <a href="/">Samepage</a>
+      <span>every number opens as its rows</span>
+    </div>
+    <nav>
+      {% if event_id %}
+      <a href="/e/{{ event_id }}/projects">Gallery</a>
+      <a href="/e/{{ event_id }}/results">Results</a>
+      {% if is_judge %}<a href="/e/{{ event_id }}/judge/batches">Console</a>{% endif %}
+      {% if is_staff %}
+      <a href="/e/{{ event_id }}/progress">Progress</a>
+      <a href="/e/{{ event_id }}/scores">Scores</a>
+      <a href="/e/{{ event_id }}/normalization">Lab</a>
+      <a href="/e/{{ event_id }}/duplicates">Duplicates</a>
+      <a href="/e/{{ event_id }}/audit">Audit</a>
+      {% endif %}
+      {% endif %}
+      <a href="/about/access">Access</a>
+      {% if me %}
+      <form method="post" action="/logout">{% csrf_token %}<button class="outline" type="submit">Sign out</button></form>
+      {% else %}
+      <a href="/login" role="button" class="outline">Sign in</a>
+      {% endif %}
+    </nav>
+  </header>
+  {% if demo_mode %}
+  <aside class="demo">
+    <span>Demo</span>
+    <a href="/demo/enter/org">Organizer</a>
+    <a href="/demo/enter/jdg08">Judge A</a>
+    <a href="/demo/enter/jdg03">Judge B</a>
+    <a href="/demo/enter/priya1">Participant</a>
+    <a href="/demo/enter/admin">Admin</a>
+    {% if me %}<em>signed in as {{ me.email }}</em>{% endif %}
+  </aside>
+  {% endif %}
+  <main class="container">
+    {% block main %}{% endblock %}
+  </main>
+  <footer class="site">
+    <span>Samepage</span>
+    <span>HTML, JSON and CSV from one policy check</span>
+  </footer>
+</body>
+</html>

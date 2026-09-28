@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page">
+  <h1>Progress</h1>
+  <p class="tools"><a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a></p>
+</header>
+{% if payload.provisional %}
+<p class="banner">1 decision awaiting confirmation ({% for dup in payload.provisional %}<a href="/e/{{ event_id }}/duplicates/{{ dup }}">{{ dup }}</a>{% endfor %})</p>
+{% endif %}
+<p class="sentence">
+  <a href="/e/{{ event_id }}/scores.csv?counted=true"><data data-field="counted" value="{{ payload.sentence.counted }}">{{ payload.sentence.counted }} counted</data></a>
+  +
+  <a href="/e/{{ event_id }}/scores.csv?counted=false"><data data-field="excluded" value="{{ payload.sentence.excluded }}">{{ payload.sentence.excluded }} excluded</data></a>
+  =
+  <a href="/e/{{ event_id }}/scores.csv"><data data-field="total" value="{{ payload.sentence.total }}">{{ payload.sentence.total }}</data></a>
+</p>
+<p class="sentence">
+  <a href="/e/{{ event_id }}/projects.csv?review=full"><data data-field="fully_reviewed" value="{{ payload.sentence.fully_reviewed }}">{{ payload.sentence.fully_reviewed }}</data>/{{ payload.sentence.active }} fully reviewed</a>
+  ·
+  <a href="/e/{{ event_id }}/projects.csv?review=short"><data data-field="short" value="{{ payload.sentence.short }}">{{ payload.sentence.short }} short</data></a>
+  ·
+  <a href="/e/{{ event_id }}/projects.csv?state=withdrawn"><data data-field="withdrawn_duplicate" value="{{ payload.sentence.withdrawn_duplicate }}">{{ payload.sentence.withdrawn_duplicate }} withdrawn duplicate</data></a>
+</p>
+<p class="recount">{{ payload.recount.matched }} of {{ payload.recount.total }} numbers on this page match their CSV</p>
+<h2>Batches</h2>
+<div class="overflow-auto">
+<table>
+  <thead><tr><th>Batch</th><th>Judge</th><th>State</th><th>Done</th><th>Stalled</th><th></th></tr></thead>
+  <tbody>
+  {% for batch in payload.batches %}
+  <tr>
+    <td><data data-field="batch" value="{{ batch.id }}">{{ batch.id }}</data></td>
+    <td>{{ batch.judge }}</td>
+    <td>{{ batch.state }}</td>
+    <td>{{ batch.completed }}/{{ batch.assigned }}</td>
+    <td>{{ batch.stalled }}</td>
+    <td>
+      {% if batch.state != "abandoned" and batch.state != "done" %}
+      <form method="post" action="/e/{{ event_id }}/batches/{{ batch.id }}/abandon">{% csrf_token %}<button class="secondary outline" type="submit">Abandon</button></form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<form method="post" action="/e/{{ event_id }}/assignment-runs">
+  {% csrf_token %}
+  <input type="hidden" name="kind" value="dry_run">
+  <button type="submit">Dry-run a fresh assignment</button>
+</form>
+<form method="post" action="/e/{{ event_id }}/assignment-runs">
+  {% csrf_token %}
+  <input type="hidden" name="kind" value="topup">
+  <button class="secondary" type="submit">Top up short projects</button>
+</form>
+{% endblock %}

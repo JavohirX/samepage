@@ -1,0 +1,35 @@
+"""Bearer tokens. A present but invalid Authorization header is 401 and never falls back to a cookie."""
+
+from __future__ import annotations
+
+import hashlib
+
+from django.utils import timezone
+from rest_framework.authentication import BaseAuthentication
+from rest_framework.exceptions import AuthenticationFailed
+
+from samepage.apps.portal.models import ApiToken
+
+
+class BearerAuthentication(BaseAuthentication):
+    def authenticate(self, request):
+        header = request.META.get("HTTP_AUTHORIZATION", "")
+        if not header:
+            return None
+        scheme, _, token = header.partition(" ")
+        if scheme != "Bearer" or not token:
+            raise AuthenticationFailed("Authorization is not a bearer token.")
+        digest = hashlib.sha256(token.encode()).hexdigest()
+        row = (
+            ApiToken.objects.filter(token_sha256=digest, revoked_at__isnull=True)
+            .select_related("person")
+            .first()
+        )
+        if row is None or not row.person.is_active:
+            raise AuthenticationFailed("Invalid token.")
+        if row.expires_at is not None and row.expires_at <= timezone.now():
+            raise AuthenticationFailed("Token expired.")
+        return (row.person, row)
+
+    def authenticate_header(self, request):
+        return "Bearer"

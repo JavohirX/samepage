@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+<header class="page">
+  <h1>Duplicate {{ payload.id }}</h1>
+  <p>Status <data data-field="status" value="{{ payload.status }}">{{ payload.status }}</data>
+    · resolution <data data-field="resolution" value="{{ payload.resolution }}">{{ payload.resolution }}</data>
+  </p>
+  <p>{{ payload.rule }}</p>
+</header>
+<p class="sentence">
+  Keep latest: <data data-field="preview_keep_latest_rank" value="{{ payload.preview_keep_latest_rank }}">{{ payload.kept }} ranks #{{ payload.preview_keep_latest_rank }}</data>.
+  Merge: <data data-field="preview_merge_rank" value="{{ payload.preview_merge_rank }}">#{{ payload.preview_merge_rank }}</data>.
+</p>
+<table>
+  <thead><tr><th>Project</th><th>Title</th><th>Submitted</th><th>State</th></tr></thead>
+  <tbody>
+  {% for item in items %}
+  <tr>
+    <td><data data-field="id" value="{{ item.id }}">{{ item.id }}</data></td>
+    <td><data data-field="title" value="{{ item.title }}">{{ item.title }}</data></td>
+    <td>{{ item.submitted_at }}</td>
+    <td>{{ item.state }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% if payload.status != "confirmed" %}
+<form method="post" action="/e/{{ event_id }}/duplicates/{{ payload.id }}/confirm">{% csrf_token %}
+  <input type="hidden" name="resolution" value="keep_latest">
+  <button type="submit">Confirm keep-latest</button>
+</form>
+<form method="post" action="/e/{{ event_id }}/duplicates/{{ payload.id }}/confirm">{% csrf_token %}
+  <input type="hidden" name="resolution" value="merge">
+  <button class="secondary" type="submit">Change to merge</button>
+</form>
+{% else %}
+<form method="post" action="/e/{{ event_id }}/duplicates/{{ payload.id }}/confirm">{% csrf_token %}
+  <input type="hidden" name="resolution" value="{% if payload.resolution == 'merge' %}keep_latest{% else %}merge{% endif %}">
+  <button class="secondary" type="submit">Switch resolution</button>
+</form>
+{% endif %}
+{% endblock %}

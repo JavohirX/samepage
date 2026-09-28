@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+<header class="page">
+  <h1>{{ payload.title }}</h1>
+  {% if payload.download_csv %}
+  <p class="tools"><a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">Copy JSON link</a></p>
+  {% endif %}
+</header>
+{% if items %}
+<div class="overflow-auto">
+<table>
+  <thead>
+    <tr>{% for col in columns %}<th>{{ col }}</th>{% endfor %}</tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      {% for col in columns %}
+      <td><data data-field="{{ col }}" value="{{ item|get_item:col }}">{{ item|get_item:col }}</data></td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p>Nothing in this list.</p>
+{% endif %}
+{% endblock %}

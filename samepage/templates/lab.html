@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+<header class="page">
+  <h1>Normalization lab</h1>
+  <p>λ <data data-field="lambda" value="{{ payload.lambda }}">{{ payload.lambda }}</data>
+    · Kendall τ against raw <data data-field="kendall_raw" value="{{ payload.kendall_raw }}">{{ payload.kendall_raw }}</data>
+    · data-driven k <data data-field="k_data" value="{{ payload.k_data }}">{{ payload.k_data }}</data>
+  </p>
+  <p class="tools">
+    <a href="/e/{{ event_id }}/normalization/ablation.csv">Ablation CSV</a>
+    <a href="/e/{{ event_id }}/normalization/z-failures.csv">Z failures CSV</a>
+    <a href="/e/{{ event_id }}/normalization/intervals.csv">Intervals CSV</a>
+    <a href="/e/{{ event_id }}/normalization/sensitivity.csv">Sensitivity CSV</a>
+    <a href="/e/{{ event_id }}/normalization/lojo.csv">Leave-one-judge-out CSV</a>
+  </p>
+</header>
+{% if payload.method == "raw_fallback" %}<p class="banner">normalization unavailable: raw means, ranks provisional</p>{% endif %}
+<h2>Ablation</h2>
+<div class="overflow-auto">
+<table>
+  <thead><tr><th>Project</th><th>Raw</th><th>Z</th><th>REML</th><th>k=10</th><th>Move</th></tr></thead>
+  <tbody>
+  {% for item in items %}
+  <tr>
+    <td><data data-field="id" value="{{ item.id }}">{{ item.id }}</data> {{ item.title }}</td>
+    <td>{{ item.raw_rank }}</td><td>{{ item.z_rank }}</td><td>{{ item.reml_rank }}</td><td>{{ item.k10_rank }}</td><td>{{ item.rank_move_raw }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<h2>Z-score failures</h2>
+<p>Z is refused as a method. These judges have no usable variance.</p>
+<table>
+  <thead><tr><th>Judge</th><th>n</th><th>sd</th><th>Reason</th></tr></thead>
+  <tbody>
+  {% for row in payload.z_failures %}
+  <tr><td>{{ row.judge_id }}</td><td>{{ row.n }}</td><td>{{ row.sd }}</td><td>{{ row.reason }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h2>λ sensitivity</h2>
+<table>
+  <thead><tr><th>λ</th><th>log-likelihood</th><th>Top 5</th><th>Same top 5</th></tr></thead>
+  <tbody>
+  {% for row in payload.sensitivity %}
+  <tr><td>{{ row.lambda }}</td><td>{{ row.loglik }}</td><td>{{ row.top5 }}</td><td>{{ row.top5_same }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h2>Leave one judge out</h2>
+<table>
+  <thead><tr><th>Judge</th><th>Top 5 changed</th><th>Top 5</th></tr></thead>
+  <tbody>
+  {% for row in payload.lojo %}
+  <tr><td>{{ row.judge_id }}</td><td>{{ row.top5_changed }}</td><td>{{ row.top5 }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h2>What this does not prove</h2>
+<ul>
+  {% for line in payload.limits %}<li>{{ line }}</li>{% endfor %}
+</ul>
+{% endblock %}

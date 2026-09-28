@@ -1,0 +1,91 @@
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+    image: samepage:local
+    init: true
+    user: "10001:10001"
+    environment:
+      SAMEPAGE_MODE: demo
+      OPENBLAS_NUM_THREADS: "1"
+      PORT: ${PORT:-8080}
+      DB_OWNER_URL: postgres://owner:${DB_OWNER_PASSWORD:-demo-owner}@db:5432/samepage
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:-demo-app}
+      ALLOWED_HOSTS: localhost,127.0.0.1,app
+      SECRET_KEY: ${SECRET_KEY:-demo-secret-key-not-for-production-use-32b}
+      MEDIA_ROOT: /data/media
+    ports:
+      - "${PORT:-8080}:8000"
+    volumes:
+      - media:/data/media
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 60s
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: owner
+      POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD:-demo-owner}
+      POSTGRES_DB: samepage
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U owner -d samepage"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  backup:
+    profiles: ["ops"]
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${DB_OWNER_PASSWORD:-demo-owner}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+      - media:/data/media:ro
+    entrypoint: ["sh", "-c", "mkdir -p /backups/latest && pg_dump -h db -U owner -d samepage -Fc -f /backups/latest/db.dump && tar -C /data -cf /backups/latest/media.tar media"]
+  restore:
+    profiles: ["ops"]
+    image: postgres:16-alpine
+    environment:
+      PGPASSWORD: ${DB_OWNER_PASSWORD:-demo-owner}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+      - media:/data/media
+    entrypoint: ["sh", "-c", "pg_restore -h db -U owner -d samepage --clean --if-exists /backups/latest/db.dump && tar -C /data -xf /backups/latest/media.tar"]
+  test:
+    profiles: ["test"]
+    build:
+      context: .
+      target: test
+    environment:
+      DATABASE_URL: postgres://owner:${DB_OWNER_PASSWORD:-demo-owner}@db:5432/samepage
+      SAMEPAGE_FAST_HASH: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+  oracle:
+    profiles: ["oracle"]
+    build:
+      context: .
+      target: oracle
+    volumes:
+      - ./.dogfood.toml:/work/.dogfood.toml:ro
+    depends_on:
+      app:
+        condition: service_healthy
+volumes:
+  pgdata: {}
+  media: {}

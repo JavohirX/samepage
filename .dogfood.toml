@@ -1,0 +1,19 @@
+[portal]
+base_url = "http://localhost:8080"
+
+[tiers]
+claimed = ["T1", "T2"]
+pitch = "Every number on every page opens as the rows behind it: each list page is also a CSV and a JSON file from one policy check, and statsmodels re-derives our normalized ranking from the scores.csv an organizer downloads."
+
+[auth]
+organizer = "Authorization: Bearer sp_demo_org_6ffc79cd07cf2395bf305af7958f537287d840fb34ccd179c94cf52c4363280d"
+judge_a = "Authorization: Bearer sp_demo_jdg08_db077fb394e3374f22839475b7a21522ebd009a64115c803fb6d15ed38d404ad"
+judge_b = "Authorization: Bearer sp_demo_jdg03_f056283662f6dcf9d3872b94365d55317f61eeb5bbfd79a227b739372e5c07b3"
+participant = "Authorization: Bearer sp_demo_priya1_f85c87c220a901c9a55d13584dd11d8b6210c2f150fec88d33d00f1464fa94df"
+
+[routes]
+gallery = "/e/evt_01/projects"
+submit = "/e/evt_01/projects.json"
+judge_scores = "/e/evt_01/judges/me/scores.json"
+peer_scores = "/e/evt_01/judges/jdg_08/scores.json"
+csv_export = "/e/evt_01/scores.csv"

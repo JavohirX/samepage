@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+{% with item=payload.item %}
+<header class="page">
+  <p class="kicker"><data data-field="track_name" value="{{ item.track_name }}">{{ item.track_name }}</data> · <data data-field="id" value="{{ item.id }}">{{ item.id }}</data></p>
+  <h1><data data-field="title" value="{{ item.title }}">{{ item.title }}</data></h1>
+  <p><data data-field="tagline" value="{{ item.tagline }}">{{ item.tagline }}</data></p>
+</header>
+{% if item.badge %}<p class="badge"><data data-field="badge" value="{{ item.badge }}">{{ item.badge }}</data></p>{% endif %}
+<dl class="facts">
+  <div><dt>State</dt><dd><data data-field="state" value="{{ item.state }}">{{ item.state }}</data></dd></div>
+  {% if item.team_name %}<div><dt>Team</dt><dd><data data-field="team_name" value="{{ item.team_name }}">{{ item.team_name }}</data></dd></div>{% endif %}
+  <div><dt>Track</dt><dd><data data-field="track" value="{{ item.track }}">{{ item.track }}</data></dd></div>
+  <div><dt>Submitted</dt><dd><data data-field="submitted_at" value="{{ item.submitted_at }}">{{ item.submitted_at }}</data> UTC</dd></div>
+  <div><dt>Repo</dt><dd><data data-field="repo_url" value="{{ item.repo_url }}">{{ item.repo_url }}</data></dd></div>
+  <div><dt>Live</dt><dd><data data-field="live_url" value="{{ item.live_url }}">{{ item.live_url }}</data></dd></div>
+  <div><dt>Video</dt><dd><data data-field="video_url" value="{{ item.video_url }}">{{ item.video_url }}</data></dd></div>
+  <div><dt>Tags</dt><dd><data data-field="tech_tags" value="{{ item.tech_tags }}">{{ item.tech_tags }}</data></dd></div>
+  <div><dt>Description</dt><dd><data data-field="description" value="{{ item.description }}">{{ item.description }}</data></dd></div>
+</dl>
+<p class="tools"><a href="{{ payload.download_json }}">JSON</a></p>
+{% endwith %}
+{% endblock %}

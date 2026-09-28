@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+<header class="page">
+  <h1>Results</h1>
+  <p class="tools"><a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a></p>
+</header>
+<p>{{ payload.story }}</p>
+{% if payload.degraded %}<p class="banner">{{ payload.banner }}</p>{% else %}<p class="banner">{{ payload.banner }}</p>{% endif %}
+<p class="meta">method <data data-field="method" value="{{ payload.method }}">{{ payload.method }}</data>
+  · λ <data data-field="lambda" value="{{ payload.lambda }}">{{ payload.lambda }}</data>
+  · ranking <data data-field="ranking_sha256" value="{{ payload.ranking_sha256 }}">{{ payload.ranking_sha256 }}</data>
+</p>
+<div class="overflow-auto">
+<table>
+  <thead>
+    <tr><th>Rank</th><th>Project</th><th>Adjusted</th><th>Raw</th><th>k=10</th><th>n</th><th>P(top 5)</th><th>90% rank</th><th>Track</th></tr>
+  </thead>
+  <tbody>
+  {% for item in items %}
+  <tr>
+    <td><data data-field="rank" value="{{ item.rank }}">{{ item.rank }}</data></td>
+    <td><a href="/e/{{ event_id }}/projects/{{ item.id }}"><data data-field="title" value="{{ item.title }}">{{ item.title }}</data></a> <span class="id"><data data-field="id" value="{{ item.id }}">{{ item.id }}</data></span></td>
+    <td><data data-field="adjusted" value="{{ item.adjusted }}">{{ item.adjusted }}</data></td>
+    <td><data data-field="raw_mean" value="{{ item.raw_mean }}">{{ item.raw_mean }}</data></td>
+    <td><data data-field="raptors_k10" value="{{ item.raptors_k10 }}">{{ item.raptors_k10 }}</data></td>
+    <td><data data-field="n_reviews" value="{{ item.n_reviews }}">{{ item.n_reviews }}</data></td>
+    <td><data data-field="p_top5" value="{{ item.p_top5 }}">{{ item.p_top5 }}</data></td>
+    <td><data data-field="rank_lo" value="{{ item.rank_lo }}">{{ item.rank_lo }}</data>–<data data-field="rank_hi" value="{{ item.rank_hi }}">{{ item.rank_hi }}</data></td>
+    <td><data data-field="track" value="{{ item.track }}">{{ item.track }}</data></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% if is_staff and not payload.published %}
+<form method="post" action="/e/{{ event_id }}/publish">{% csrf_token %}<button type="submit">Publish results</button></form>
+<p class="meta">Publishing is refused while a duplicate decision is still provisional.</p>
+{% endif %}
+{% endblock %}

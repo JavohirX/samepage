@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% load static %}
+{% block main %}
+<header class="page">
+  <p class="kicker">{{ payload.track }} · {{ payload.project_id }}</p>
+  <h1>{{ payload.title }}</h1>
+  <p>{{ payload.tagline }}</p>
+</header>
+<p data-save-status class="meta">{% if payload.finalized %}final{% else %}not yet final{% endif %}</p>
+<form method="post" action="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/scores" data-console data-autosave="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/scores.json" data-csrf="{{ csrf_token }}">
+  {% csrf_token %}
+  {% for row in payload.criteria %}
+  <label>{{ row.key }}
+    <input name="c_{{ row.key }}" type="number" min="1" max="5" required value="{{ row.value }}" data-criterion="{{ row.key }}">
+  </label>
+  {% endfor %}
+  <label>Comment
+    <textarea name="comment">{{ payload.comment }}</textarea>
+  </label>
+  <button type="submit">Save</button>
+</form>
+<form method="post" action="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/finalize">
+  {% csrf_token %}
+  {% for row in payload.criteria %}
+  <input type="hidden" name="c_{{ row.key }}" value="{{ row.value }}">
+  {% endfor %}
+  <input type="hidden" name="comment" value="{{ payload.comment }}">
+  <button class="secondary" type="submit">Finalize</button>
+</form>
+<p class="meta">Keys 1–5 score the selected criterion. J and K move between criteria. Autosave needs JavaScript. The buttons work without it.</p>
+<script src="{% static 'console.js' %}"></script>
+{% endblock %}

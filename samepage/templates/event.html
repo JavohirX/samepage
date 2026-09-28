@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page">
+  <h1>{{ payload.name }}</h1>
+  <p>State {{ payload.state }} · submissions close {{ payload.submissions_close }} UTC</p>
+</header>
+<ul>
+  <li><a href="/e/{{ event_id }}/projects">Gallery</a></li>
+  <li><a href="/e/{{ event_id }}/results">Results</a></li>
+  {% if is_staff %}
+  <li><a href="/e/{{ event_id }}/progress">Progress</a></li>
+  <li><a href="/e/{{ event_id }}/normalization">Normalization lab</a></li>
+  <li><a href="/e/{{ event_id }}/duplicates">Duplicates</a></li>
+  {% endif %}
+</ul>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+<section class="hero">
+  <p class="kicker">DOGFOOD 2026</p>
+  <h1>Every number opens as the rows behind it.</h1>
+  <p>Each list page is also a CSV file and a JSON file. All three come from the same rows, through the same policy check. A statsmodels container re-derives the ranking from the scores.csv an organizer downloads.</p>
+</section>
+<section>
+  <h2>Events</h2>
+  <ul class="events">
+    {% for item in items %}
+    <li><a href="/e/{{ item.id }}/projects"><data data-field="name" value="{{ item.name }}">{{ item.name }}</data></a> <data data-field="state" value="{{ item.state }}">{{ item.state }}</data></li>
+    {% empty %}
+    <li>No events yet.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

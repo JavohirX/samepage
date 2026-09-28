@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+<header class="page">
+  <h1>Gallery</h1>
+  <p class="tools"><a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a></p>
+</header>
+<form class="filters" method="get">
+  <input type="search" name="q" value="{{ payload.filters.q }}" placeholder="Search titles" aria-label="Search">
+  <select name="track" aria-label="Track">
+    <option value="">All tracks</option>
+    {% for track in payload.tracks %}
+    <option value="{{ track.id }}" {% if payload.filters.track == track.id %}selected{% endif %}>{{ track.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Filter</button>
+</form>
+<p class="count"><data data-field="count" value="{{ payload.count }}">{{ payload.count }}</data> projects</p>
+<div class="cards">
+  {% for item in items %}
+  <article class="card">
+    <p class="track"><data data-field="track_name" value="{{ item.track_name }}">{{ item.track_name }}</data></p>
+    <h2><a href="/e/{{ event_id }}/projects/{{ item.id }}"><data data-field="title" value="{{ item.title }}">{{ item.title }}</data></a></h2>
+    <p><data data-field="tagline" value="{{ item.tagline }}">{{ item.tagline }}</data></p>
+    <p class="meta">
+      <data data-field="team_name" value="{{ item.team_name }}">{{ item.team_name }}</data>
+      · <data data-field="state" value="{{ item.state }}">{{ item.state }}</data>
+      · <data data-field="n_reviews" value="{{ item.n_reviews }}">{{ item.n_reviews }}</data> reviews
+    </p>
+    {% if item.badge %}<p class="badge"><data data-field="badge" value="{{ item.badge }}">{{ item.badge }}</data></p>{% endif %}
+    <p class="id"><data data-field="id" value="{{ item.id }}">{{ item.id }}</data></p>
+  </article>
+  {% empty %}
+  <p>No projects on this page.</p>
+  {% endfor %}
+</div>
+{% endblock %}
