@@ -29,7 +29,7 @@
     <div class="grid">
       <label>Submissions open (UTC) <input type="datetime-local" name="starts_at" value="{{ payload.starts_at|slice:':16' }}"></label>
       <label>Submissions close (UTC) <input type="datetime-local" name="submissions_close" required value="{{ payload.submissions_close|slice:':16' }}"></label>
-      <label>Judging ends (UTC) <input type="datetime-local" name="judging_ends" value="{{ payload.judging_ends|slice:':16' }}"></label>
+      <label>Judging ends (UTC; judges cannot save or finalize after it) <input type="datetime-local" name="judging_ends" value="{{ payload.judging_ends|slice:':16' }}"></label>
     </div>
     <div class="grid">
       <label>Largest team <input type="number" name="max_team_size" min="1" max="20" value="{{ payload.max_team_size }}"></label>

@@ -36,7 +36,9 @@ def _staff(person: Person | None, event_id: str) -> bool:
 def _open_for_teams(event: Event) -> None:
     if is_closed(db_now(), event.submissions_close):
         raise Conflict(closed_message(event.submissions_close) + "; teams are fixed now")
-    if event.state not in {"draft", "open"}:
+    if event.state == "draft":
+        raise Conflict("The event is not open yet; teams can form once the organizer opens it.")
+    if event.state != "open":
         raise Conflict(f"The event is {event.state}; teams are fixed now.")
 
 

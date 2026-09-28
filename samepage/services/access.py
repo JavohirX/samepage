@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from rest_framework.exceptions import NotAuthenticated, PermissionDenied
+from rest_framework.exceptions import NotAuthenticated, NotFound, PermissionDenied
 
 from samepage.apps.portal.models import Event, RoleGrant
 from samepage.core import policy
@@ -32,6 +32,11 @@ def require(principal, action: str, *, event_id: str | None = None, target: str 
     if policy.allows(
         roles, action, target_is_self=target_is_self, published=published, signed_in=principal is not None
     ):
+        if event_id and not roles & policy.STAFF and Event.objects.filter(id=event_id, state="draft").exists():
+            # A draft event is its organizers' work in progress: to everyone else it does not exist yet,
+            # by id as well as in the list. Checked after the policy, so the answer is the same as for
+            # an id that was never created.
+            raise NotFound("Unknown event.")
         return roles
     # Unpublished results are a refusal, including for anonymous visitors.
     # Other protected pages answer 401 so a browser gets the sign-in form.

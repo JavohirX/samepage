@@ -9,7 +9,7 @@
   <div class="grid">
     <label>Submissions open (optional) <input type="datetime-local" name="starts_at"></label>
     <label>Submissions close <input type="datetime-local" name="submissions_close" required></label>
-    <label>Judging ends (optional) <input type="datetime-local" name="judging_ends"></label>
+    <label>Judging ends (optional, UTC; judges cannot save or finalize after it) <input type="datetime-local" name="judging_ends"></label>
   </div>
   <div class="grid">
     <label>Tracks, one per line <textarea name="tracks" rows="4" required placeholder="Developer tools&#10;Climate"></textarea></label>

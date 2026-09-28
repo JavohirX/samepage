@@ -17,6 +17,7 @@
   <a href="/e/{{ event_id }}/projects/{{ payload.project_id }}">project page</a>
 </p>
 <p data-save-status class="meta">{% if payload.finalized %}final{% else %}{{ payload.state }}, not yet final{% endif %}</p>
+{% if payload.judging_ends %}<p class="meta">Judging ends {{ payload.judging_ends }} UTC. After that, saving and finalizing are refused unless the organizer moves the end later.</p>{% endif %}
 <form method="post" action="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/scores" data-console data-autosave="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/scores.json" data-csrf="{{ csrf_token }}">
   {% csrf_token %}
   {% for row in payload.criteria %}

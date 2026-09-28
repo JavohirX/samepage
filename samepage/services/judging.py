@@ -25,6 +25,7 @@ from samepage.apps.portal.models import (
 from samepage.core.errors import Conflict, Unprocessable
 from samepage.engine.assign import assign, coi_violations, graph_report, lower_bound
 from samepage.services import audit
+from samepage.services.clock import db_now
 from samepage.services.guards import refuse_if_published
 from samepage.services.ledger import criterion_keys
 
@@ -42,6 +43,10 @@ def _assigned(event_id: str, judge_id: str, project_id: str) -> Assignment | Non
         .select_related("submission", "batch")
         .first()
     )
+
+
+def _stamp_or_blank(value) -> str:
+    return value.strftime("%Y-%m-%dT%H:%M:%SZ") if value is not None else ""
 
 
 def console_payload(event_id: str, judge_id: str, project_id: str) -> dict:
@@ -80,12 +85,31 @@ def console_payload(event_id: str, judge_id: str, project_id: str) -> dict:
         "state": state or "unscored",
         "batch_state": row.batch.state,
         "finalized": bool(row.finalized_at),
+        "judging_ends": _stamp_or_blank(judging_ends(event_id)),
         "columns": ["key", "value"],
         "items": [{"key": key, "value": current.get(key, "")} for key in keys],
         "count": len(keys),
         "html_omitted": {"panel_totals": "judges do not see the weighted total while scoring"},
         "download_json": f"/e/{event_id}/judge/assignments/{project_id}.json",
     }
+
+
+def judging_ends(event_id: str):
+    from samepage.apps.portal.models import Event
+
+    return Event.objects.filter(id=event_id).values_list("judging_ends", flat=True).first()
+
+
+def refuse_after_judging_ends(event_id: str) -> None:
+    """The event's 'Judging ends' time, on the database clock. Unset means no end. An organizer
+    reopens judging by moving the time later on the settings page (until publish)."""
+    ends = judging_ends(event_id)
+    if ends is not None and db_now() > ends:
+        from samepage.services.events import stamp
+
+        raise Conflict(
+            f"Judging ended at {stamp(ends)} UTC. An organizer can move 'Judging ends' later on the settings page."
+        )
 
 
 def _latest_map(judge_id: str, project_id: str) -> dict[str, ScoreRev]:
@@ -114,6 +138,7 @@ def save_scores(event_id: str, judge: Person, project_id: str, body: dict, *, fi
     if row is None:
         raise PermissionDenied("You cannot do that.")
     refuse_if_published(event_id)
+    refuse_after_judging_ends(event_id)
     # One writer per assignment: concurrent autosaves queue here instead of racing for the next rev.
     row = Assignment.objects.select_for_update().select_related("submission", "batch").get(pk=row.pk)
     if row.finalized_at and not final:
