@@ -25,9 +25,9 @@ def rank_draws(beta: np.ndarray, cov: np.ndarray, *, n_draws: int, seed: int) ->
 
 
 def tie_banner(p_top5: list[float], floor: float = 0.10) -> dict:
-    """Lowest rank whose project still has P(top-5) ≥ floor. Ranks are 1-based positions in the supplied list order? 
+    """Lowest rank whose project still has P(top-5) ≥ floor.
 
-    Callers pass p_top5 aligned with rank order (index 0 is rank 1).
+    Callers pass p_top5 aligned with rank order: index 0 is rank 1.
     """
     m = 0
     for index, probability in enumerate(p_top5, start=1):

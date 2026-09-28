@@ -222,3 +222,11 @@ def test_a_server_error_is_logged_with_the_reference_the_page_shows(client, bear
     assert problem["detail"] == "Something went wrong."
     assert "synthetic" not in response.content.decode("utf-8")
     assert any(problem["correlation_id"] in record.getMessage() for record in caplog.records)
+
+
+def test_console_finalize_posts_the_fields_on_screen(client, django_user_model, open_assignment):
+    _signed_in(client, django_user_model, "jdg_08")
+    page = client.get(f"/e/evt_01/judge/assignments/{open_assignment}").content.decode("utf-8")
+    assert f'formaction="/e/evt_01/judge/assignments/{open_assignment}/finalize"' in page
+    # No second form with hidden copies of the scores taken when the page loaded.
+    assert 'type="hidden" name="c_' not in page

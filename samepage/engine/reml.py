@@ -107,13 +107,12 @@ def choose_lambda(x: np.ndarray, z: np.ndarray, y: np.ndarray):
     stage1_t = best_t
     stage1_k = int(round((stage1_t - LN_LO) / STAGE1_STEP))
     for t, lam in stage2_grid(stage1_t):
-        llf, sigma2, beta, cov_factor = profile_loglik(x, z, y, lam)
+        llf, _sigma2, _beta, _cov_factor = profile_loglik(x, z, y, lam)
         evaluations += 1
         if llf > best_ll:
             best_ll = llf
             best_t = t
             best_lam = lam
-            best_pack = (sigma2, beta, cov_factor)
     # Recompute the winning point so the returned effects match the chosen λ,
     # including the case where stage 1 already held the maximum.
     sigma2, beta, cov_factor = profile_loglik(x, z, y, best_lam)[1:]

@@ -18,14 +18,8 @@
     <textarea name="comment">{{ payload.comment }}</textarea>
   </label>
   <button type="submit">Save</button>
-</form>
-<form method="post" action="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/finalize">
-  {% csrf_token %}
-  {% for row in payload.criteria %}
-  <input type="hidden" name="c_{{ row.key }}" value="{{ row.value }}">
-  {% endfor %}
-  <input type="hidden" name="comment" value="{{ payload.comment }}">
-  <button class="secondary" type="submit">Finalize</button>
+  {# Finalize submits this same form, so it finalizes the values on screen, not the ones the page loaded with. #}
+  <button class="secondary" type="submit" formaction="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/finalize">Finalize</button>
 </form>
 <p class="meta">Keys 1–5 score the selected criterion. J and K move between criteria. Autosave needs JavaScript. The buttons work without it.</p>
 <script src="{% static 'console.js' %}"></script>
