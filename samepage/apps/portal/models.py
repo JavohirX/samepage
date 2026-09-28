@@ -10,14 +10,21 @@ from django.utils import timezone
 
 
 class PersonManager(BaseUserManager):
-    def create_user(self, email, id, password=None, **extra):
-        person = self.model(id=id, email=self.normalize_email(email), **extra)
+    def create_user(self, email, id=None, password=None, **extra):
+        import secrets
+
+        person = self.model(id=id or "per_" + secrets.token_hex(5), email=self.normalize_email(email).lower(), **extra)
         if password:
             person.set_password(password)
         else:
             person.set_unusable_password()
         person.save(using=self._db)
         return person
+
+    def create_superuser(self, email, password=None, **extra):
+        """`manage.py createsuperuser` and `manage.py samepage_admin` both end here: a global admin."""
+        extra["is_admin"] = True
+        return self.create_user(email, password=password, **extra)
 
 
 class Person(AbstractBaseUser):
@@ -73,6 +80,11 @@ class Event(models.Model):
     windows = models.JSONField(default=dict, blank=True)
     blind_judging = models.BooleanField(default=False)
     custom_questions = models.JSONField(default=list, blank=True)
+    description = models.TextField(blank=True, default="")
+    starts_at = models.DateTimeField(null=True, blank=True)
+    judging_ends = models.DateTimeField(null=True, blank=True)
+    max_team_size = models.PositiveSmallIntegerField(default=4)
+    created_by = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "event"
@@ -98,6 +110,7 @@ class PrizeCategory(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="prizes")
     name = models.TextField()
     track = models.ForeignKey(Track, null=True, blank=True, on_delete=models.PROTECT)
+    description = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "prize_category"
@@ -107,6 +120,7 @@ class Criterion(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="criteria")
     track = models.ForeignKey(Track, null=True, blank=True, on_delete=models.CASCADE)
     key = models.TextField()
+    label = models.TextField(blank=True, default="")
     weight = models.DecimalField(max_digits=8, decimal_places=4)
     scale_min = models.PositiveSmallIntegerField(default=1)
     scale_max = models.PositiveSmallIntegerField(default=5)
@@ -168,18 +182,34 @@ class TeamMember(models.Model):
 
 
 class Invite(models.Model):
+    """A secret link. `team`: joins a team. `password`: sets the password of an account an organizer created.
+
+    Only the sha256 of the token is stored. The link is shown once, to the person who made it.
+    """
+
+    KINDS = ("team", "password")
     id = models.TextField(primary_key=True)
-    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="invites")
+    kind = models.TextField(default="team")
+    event = models.ForeignKey(Event, null=True, blank=True, on_delete=models.CASCADE, related_name="invites")
+    team = models.ForeignKey(Team, null=True, blank=True, on_delete=models.CASCADE, related_name="invites")
+    person = models.ForeignKey(Person, null=True, blank=True, on_delete=models.CASCADE, related_name="password_invites")
     token_sha256 = models.CharField(max_length=64, unique=True)
     expires_at = models.DateTimeField()
     revoked_at = models.DateTimeField(null=True, blank=True)
     max_uses = models.PositiveIntegerField(default=1)
     uses = models.PositiveIntegerField(default=0)
+    created_by = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = "invite"
         constraints = [
             models.CheckConstraint(condition=Q(uses__lte=models.F("max_uses")), name="invite_uses_cap"),
+            models.CheckConstraint(condition=Q(kind__in=("team", "password")), name="invite_kind"),
+            models.CheckConstraint(
+                condition=(Q(kind="team") & Q(team__isnull=False)) | (Q(kind="password") & Q(person__isnull=False)),
+                name="invite_target",
+            ),
         ]
 
 
@@ -232,7 +262,11 @@ class SubmissionMedia(models.Model):
     position = models.PositiveSmallIntegerField(default=0)
     sha256 = models.CharField(max_length=64)
     content_type = models.TextField()
-    path = models.TextField()
+    path = models.TextField(blank=True, default="")
+    # Image bytes live in Postgres, so a pg_dump is the whole backup and the app needs no writable disk.
+    data = models.BinaryField(default=b"")
+    size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
         db_table = "submission_media"
@@ -285,7 +319,7 @@ class DuplicateGroup(models.Model):
 
 
 class AssignmentRun(models.Model):
-    KINDS = ("import", "initial", "topup", "dry_run")
+    KINDS = ("import", "initial", "topup", "dry_run", "manual")
     id = models.TextField(primary_key=True)
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="assignment_runs")
     kind = models.TextField()
@@ -394,6 +428,8 @@ class ResultsSnapshot(models.Model):
     cause_audit_seq = models.BigIntegerField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
     seconds = models.FloatField(default=0)
+    # sha256 of the fit's inputs (counted reviews, weights, active projects). A mismatch means stale.
+    input_fingerprint = models.TextField(blank=True, default="")
 
     class Meta:
         db_table = "results_snapshot"
