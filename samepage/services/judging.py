@@ -17,7 +17,7 @@ from samepage.apps.portal.models import (
     Submission,
 )
 from samepage.core.errors import Conflict, Unprocessable
-from samepage.engine.assign import assign, graph_report, lower_bound
+from samepage.engine.assign import assign, coi_violations, graph_report, lower_bound
 from samepage.services import audit
 from samepage.services.ledger import criterion_keys
 
@@ -75,11 +75,17 @@ def save_scores(event_id: str, judge: Person, project_id: str, body: dict, *, fi
     row = _assigned(event_id, judge.id, project_id)
     if row is None:
         raise PermissionDenied("You cannot do that.")
+    # One writer per assignment: concurrent autosaves queue here instead of racing for the next rev.
+    row = Assignment.objects.select_for_update().select_related("submission", "batch").get(pk=row.pk)
     if row.finalized_at and not final:
         raise Conflict("This score is final.")
     keys = criterion_keys(event_id)
     incoming = body.get("criteria") or body
-    comment = str(body.get("comment") or "")
+    if not isinstance(incoming, dict):
+        raise Unprocessable({"criteria": "Expected an object of criterion scores."})
+    comment = body.get("comment") or ""
+    if not isinstance(comment, str):
+        raise Unprocessable({"comment": "Expected text."})
     values = {}
     errors = {}
     for key in keys:
@@ -109,6 +115,9 @@ def save_scores(event_id: str, judge: Person, project_id: str, body: dict, *, fi
     )
     if unchanged:
         return {"saved": False, "state": state, "rev": max(item.rev for item in latest.values())}
+    if row.finalized_at:
+        # A final score changes only through an unlock, which this build does not offer.
+        raise Conflict("This score is final.")
     seq = audit.append(
         event_id,
         judge.id,
@@ -174,11 +183,14 @@ def my_batches(event_id: str, judge_id: str) -> dict:
     }
 
 
-def _pools(event_id: str):
+def _pools(event_id: str, *, include_withdrawn: bool = False):
     from samepage.apps.portal.models import Coi, JudgeTrack, TeamMember
 
     projects = []
-    for submission in Submission.objects.filter(event_id=event_id).exclude(state="withdrawn").select_related("team"):
+    submissions = Submission.objects.filter(event_id=event_id).select_related("team")
+    if not include_withdrawn:
+        submissions = submissions.exclude(state="withdrawn")
+    for submission in submissions:
         emails = list(
             TeamMember.objects.filter(team_id=submission.team_id).values_list("person__email", flat=True)
         )
@@ -202,7 +214,13 @@ def _pools(event_id: str):
     return projects, judges, existing
 
 
-def dry_run(event_id: str, *, seed: int = 20260301, cap: int = 12, coverage: int = 3) -> dict:
+def _conflicts(event_id: str, pairs) -> list[dict]:
+    projects, judges, _existing = _pools(event_id, include_withdrawn=True)
+    return coi_violations(pairs, projects, judges)
+
+
+@transaction.atomic
+def dry_run(event_id: str, *, actor: str, seed: int = 20260301, cap: int = 12, coverage: int = 3) -> dict:
     projects, judges, _existing = _pools(event_id)
     # A fresh design ignores the imported reviews, which is what the dry-run button is for.
     report = assign(projects, judges, existing=set(), cap=cap, coverage=coverage, seed=seed)
@@ -222,9 +240,26 @@ def dry_run(event_id: str, *, seed: int = 20260301, cap: int = 12, coverage: int
             "articulation_judges": graph["articulation_judges"],
             "lower_bound": bound,
             "load": report["load"],
+            "coi_violations": len(coi_violations(edges, projects, judges)),
         },
     )
+    audit.append(
+        event_id,
+        actor,
+        "assignment.dry_run",
+        run.id,
+        None,
+        {"seed": seed, "cap": cap, "coverage": coverage, "assignments": len(edges), "issued": False},
+    )
     return run_payload(run)
+
+
+def _run_conflicts(run: AssignmentRun, report: dict):
+    if "coi_violations" in report:
+        return report["coi_violations"]
+    # Issued runs (the import, older top-ups): measure the assignments that exist.
+    pairs = Assignment.objects.filter(batch__run=run).values_list("submission_id", "judge_id")
+    return len(_conflicts(run.event_id, list(pairs)))
 
 
 def run_payload(run: AssignmentRun) -> dict:
@@ -237,7 +272,7 @@ def run_payload(run: AssignmentRun) -> dict:
         {"key": "projects", "value": report.get("projects", "")},
         {"key": "components", "value": report.get("components", "")},
         {"key": "articulation_judges", "value": " ".join(report.get("articulation_judges") or [])},
-        {"key": "coi_violations", "value": 0},
+        {"key": "coi_violations", "value": _run_conflicts(run, report)},
     ]
     return {
         "title": f"Assignment {run.id}",
@@ -255,7 +290,8 @@ def run_payload(run: AssignmentRun) -> dict:
     }
 
 
-def topup(event_id: str, *, seed: int = 7) -> AssignmentRun:
+@transaction.atomic
+def topup(event_id: str, *, actor: str, seed: int = 7) -> AssignmentRun:
     projects, judges, existing = _pools(event_id)
     short = []
     from collections import Counter
@@ -284,6 +320,23 @@ def topup(event_id: str, *, seed: int = 7) -> AssignmentRun:
             "achieved_max_load": report["achieved_max_load"],
             "load_histogram": report["load_histogram"],
             "short": sorted(row["id"] for row in short),
+            "coi_violations": len(
+                coi_violations(
+                    [(row["project_id"], row["judge_id"]) for row in report["assignments"]], projects, judges
+                )
+            ),
+        },
+    )
+    audit.append(
+        event_id,
+        actor,
+        "assignment.topup",
+        run.id,
+        None,
+        {
+            "seed": seed,
+            "short": sorted(row["id"] for row in short),
+            "assignments": [f"{row['project_id']}:{row['judge_id']}" for row in report["assignments"]],
         },
     )
     by_judge: dict[str, list[str]] = {}

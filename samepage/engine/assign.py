@@ -216,8 +216,32 @@ def lower_bound(projects: list[dict], judges: list[dict], coverage: int = 3) -> 
             if set(next(j["tracks"] for j in judges if j["id"] == judge)) <= {track}
         ]
         if outsiders and len(by_track) > 1:
+            # Only when the reviews divide evenly does every judge sit exactly at the bound, so a
+            # bridge to another track costs one more. Otherwise a judge below the bound can bridge.
+            connected = at_least + 1 if (coverage * n) % k == 0 else at_least
             force.append(
                 f"{track}: any review linking it to another track must be done by "
-                f"{', '.join(eligible[track])}. A connected design needs some judge with load ≥ {at_least + 1}."
+                f"{', '.join(eligible[track])}. A connected design needs some judge with load ≥ {connected}."
             )
     return {"lines": lines, "connected": force, "coverage": coverage}
+
+
+def coi_violations(pairs, projects: list[dict], judges: list[dict]) -> list[dict]:
+    """Pairs (project_id, judge_id) that break a conflict rule the matcher enforces.
+
+    A judge whose email is on the project's team, or who has a declared conflict with the
+    team, must not review it. The matcher never proposes such an edge; this measures what
+    was actually assigned, including imported history, instead of assuming zero.
+    """
+    team_of = {row["id"]: row.get("team") for row in projects}
+    team_emails = {row["id"]: {e.lower() for e in row.get("team_emails") or []} for row in projects}
+    emails = {row["id"]: (row.get("email") or "").lower() for row in judges}
+    coi = {(row["id"], team) for row in judges for team in row.get("coi_teams") or []}
+    found = []
+    for project, judge in pairs:
+        email = emails.get(judge, "")
+        if email and email in team_emails.get(project, set()):
+            found.append({"project_id": project, "judge_id": judge, "reason": "judge is on the team"})
+        elif (judge, team_of.get(project)) in coi:
+            found.append({"project_id": project, "judge_id": judge, "reason": "declared conflict"})
+    return found
