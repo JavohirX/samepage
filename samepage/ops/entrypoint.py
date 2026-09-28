@@ -83,6 +83,12 @@ def main() -> None:
     _refuse_config(settings)
     _wait_for_db(owner_url)
     call_command("migrate", interactive=False)
+    if not settings.DEMO_MODE:
+        # Refuse a demo-seeded database before the role step, so a refused boot leaves
+        # samepage_app and its password as they were.
+        from samepage.ops.preflight import refuse_unsafe_production
+
+        refuse_unsafe_production(settings)
     if os.environ.get("DB_OWNER_URL"):
         from samepage.ops.roles import ensure_app_role
 
@@ -102,9 +108,6 @@ def main() -> None:
         port = os.environ.get("PORT", "8080")
         print(banner(int(port)), flush=True)
     else:
-        from samepage.ops.preflight import refuse_unsafe_production
-
-        refuse_unsafe_production(settings)
         print("samepage production mode: preflight passed", flush=True)
     if os.environ.get("DB_OWNER_URL") and os.environ.get("SAMEPAGE_SKIP_ROLE_CHECK") != "1":
         from samepage.ops.roles import runtime_self_check

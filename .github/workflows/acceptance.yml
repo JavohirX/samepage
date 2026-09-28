@@ -202,6 +202,12 @@ jobs:
         run: |
           SAMEPAGE_MODE=demo docker compose up -d --wait --wait-timeout 300
           docker compose stop app
+          # SCRAM salts every ALTER ROLE ... PASSWORD, so any role change shows up as a new hash.
+          role_hash() {
+            docker compose exec -T db psql -U owner -d samepage -tAc \
+              "SELECT md5(rolpassword) FROM pg_authid WHERE rolname = 'samepage_app'"
+          }
+          before="$(role_hash)"
           set +e
           docker compose run --rm --no-deps -e SAMEPAGE_MODE=production -e ALLOWED_HOSTS=localhost app \
             > production-refusal-demo-db.txt 2>&1
@@ -211,6 +217,10 @@ jobs:
           test "$code" -ne 0
           grep -q "demo bearer token" production-refusal-demo-db.txt
           grep -q "demo password" production-refusal-demo-db.txt
+          after="$(role_hash)"
+          test -n "$before"
+          test "$before" = "$after"
+          echo "The refused boot left samepage_app and its password untouched."
       - name: Production boots on a fresh database and refuses every demo credential
         env:
           SAMEPAGE_MODE: production

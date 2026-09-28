@@ -6,9 +6,10 @@
 
 1. refuses to start in production mode if the configuration has a public default (see Production), before touching the database;
 2. waits for Postgres and migrates as the owner (`DB_OWNER_URL`);
-3. creates or updates the `samepage_app` role and its grants (every boot, because init scripts do not re-run on a reused volume);
-4. demo mode: seeds `fixtures.json` once, fits the results snapshot, prints the demo tokens. Production mode: refuses to start if demo tokens or demo passwords are in the database;
-5. checks that `samepage_app` cannot update `score_rev` and owns nothing, drops `DB_OWNER_URL` from the environment and execs gunicorn as that role.
+3. production mode: refuses to start if demo tokens or demo passwords are in the database. This runs before the role step, so a refused boot leaves `samepage_app` and its password as they were (the migrations have run);
+4. creates or updates the `samepage_app` role and its grants (every boot, because init scripts do not re-run on a reused volume);
+5. demo mode: seeds `fixtures.json` once, fits the results snapshot, prints the demo tokens;
+6. checks that `samepage_app` cannot update `score_rev` and owns nothing, drops `DB_OWNER_URL` from the environment and execs gunicorn as that role.
 
 ```
 docker compose up --wait

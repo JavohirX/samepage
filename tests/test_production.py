@@ -109,3 +109,50 @@ def test_demo_password_signs_in_in_demo_mode(client):
 def test_demo_sign_in_links_are_404_in_production(client, production):
     assert client.get("/demo/enter/org").status_code == 404
     assert client.post("/demo/enter/org").status_code == 404
+
+
+def test_a_refused_production_boot_does_not_touch_the_app_role(monkeypatch, production):
+    """The demo-data refusal runs before ensure_app_role, so samepage_app keeps its password."""
+    import django
+    import django.core.management as management
+
+    from samepage.ops import entrypoint, roles
+
+    steps = []
+    monkeypatch.delenv("SAMEPAGE_SERVE_ONLY", raising=False)
+    monkeypatch.setenv("DB_OWNER_URL", GOOD_ENV["DB_OWNER_URL"])
+    # main() points DATABASE_URL at the owner; setenv first so it is restored afterwards.
+    monkeypatch.setenv("DATABASE_URL", GOOD_ENV["DB_OWNER_URL"])
+    monkeypatch.setattr(django, "setup", lambda: None)
+    monkeypatch.setattr(entrypoint, "_wait_for_db", lambda url: None)
+    monkeypatch.setattr(entrypoint, "_serve", lambda: steps.append("serve"))
+    monkeypatch.setattr(management, "call_command", lambda *args, **kwargs: steps.append(args[0]))
+    monkeypatch.setattr(roles, "ensure_app_role", lambda: steps.append("ensure_app_role"))
+    monkeypatch.setattr(preflight, "config_problems", lambda settings, environ=None: [])
+    monkeypatch.setattr(preflight, "data_problems", lambda: ["1 demo bearer token(s) are still valid."])
+    with pytest.raises(SystemExit) as caught:
+        entrypoint.main()
+    assert "demo bearer token" in str(caught.value)
+    assert steps == ["migrate"]
+
+
+def test_a_clean_production_boot_still_sets_up_the_app_role(monkeypatch, production):
+    import django
+    import django.core.management as management
+
+    from samepage.ops import entrypoint, roles
+
+    steps = []
+    monkeypatch.delenv("SAMEPAGE_SERVE_ONLY", raising=False)
+    monkeypatch.setenv("SAMEPAGE_SKIP_ROLE_CHECK", "1")
+    monkeypatch.setenv("DB_OWNER_URL", GOOD_ENV["DB_OWNER_URL"])
+    monkeypatch.setenv("DATABASE_URL", GOOD_ENV["DB_OWNER_URL"])
+    monkeypatch.setattr(django, "setup", lambda: None)
+    monkeypatch.setattr(entrypoint, "_wait_for_db", lambda url: None)
+    monkeypatch.setattr(entrypoint, "_serve", lambda: steps.append("serve"))
+    monkeypatch.setattr(management, "call_command", lambda *args, **kwargs: steps.append(args[0]))
+    monkeypatch.setattr(roles, "ensure_app_role", lambda: steps.append("ensure_app_role"))
+    monkeypatch.setattr(preflight, "config_problems", lambda settings, environ=None: [])
+    monkeypatch.setattr(preflight, "data_problems", lambda: [])
+    entrypoint.main()
+    assert steps == ["migrate", "ensure_app_role", "serve"]
