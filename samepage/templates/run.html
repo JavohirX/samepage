@@ -17,10 +17,10 @@
 </ul>
 <p>Achieved max load {{ payload.report.achieved_max_load }}. Components {{ payload.report.components }}.</p>
 {% endif %}
-{% if payload.report.assignments %}
+{% if payload.issued_pairs %}
 <h2>New assignments</h2>
 <ul>
-  {% for row in payload.report.assignments %}
+  {% for row in payload.issued_pairs %}
   <li>{{ row.project_id }} → {{ row.judge_id }}</li>
   {% endfor %}
 </ul>

@@ -225,6 +225,51 @@ def test_assignment_runs_are_audited_and_measure_conflicts(client, bearer):
     assert bad.status_code == 422
 
 
+def test_dry_run_button_leads_to_a_page_that_renders(client, django_user_model):
+    """The progress page's "Dry-run a fresh assignment" form, followed like a browser would."""
+    _signed_in(client, django_user_model, "org_01")
+    response = client.post("/e/evt_01/assignment-runs", {"kind": "dry_run"})
+    assert response.status_code == 303
+    page = client.get(response["Location"])
+    assert page.status_code == 200, page.content[:400]
+    run = AssignmentRun.objects.get(id=response["Location"].rsplit("/", 1)[-1])
+    count = run.report["n_assignments"]
+    assert count > 0
+    assert f"<td>assignments</td><td>{count}</td>" in page.content.decode("utf-8")
+    # A dry run issues nothing, so it lists no new assignments.
+    assert "New assignments" not in page.content.decode("utf-8")
+
+
+@pytest.mark.parametrize("suffix", ["", ".json", ".csv"])
+def test_dry_run_page_renders_in_every_format(client, bearer, suffix):
+    created = client.post(
+        "/e/evt_01/assignment-runs.json", {"kind": "dry_run"}, content_type="application/json", **bearer("org")
+    )
+    response = client.get(f"/e/evt_01/assignment-runs/{created.json()['id']}{suffix}", **bearer("org"))
+    assert response.status_code == 200
+
+
+def test_a_dry_run_stored_with_a_bare_count_still_renders(client, bearer):
+    # Dry runs written before n_assignments kept the count under "assignments".
+    AssignmentRun.objects.create(
+        id="run_oldshape", event_id="evt_01", kind="dry_run", seed=1, report={"assignments": 5, "coi_violations": 0}
+    )
+    response = client.get("/e/evt_01/assignment-runs/run_oldshape", **bearer("org"))
+    assert response.status_code == 200
+    assert "<td>assignments</td><td>5</td>" in response.content.decode("utf-8")
+
+
+def test_topup_page_lists_the_pairs_it_issued(client, bearer):
+    created = client.post("/e/evt_01/assignment-runs.json", {"kind": "topup"}, content_type="application/json", **bearer("org"))
+    assert created.status_code == 201
+    run = AssignmentRun.objects.get(id=created.json()["id"])
+    page = client.get(f"/e/evt_01/assignment-runs/{run.id}", **bearer("org"))
+    assert page.status_code == 200
+    body = page.content.decode("utf-8")
+    for row in run.report["assignments"]:
+        assert f"{row['project_id']} → {row['judge_id']}" in body
+
+
 def test_a_server_error_is_logged_with_the_reference_the_page_shows(client, bearer, monkeypatch, caplog):
     from samepage.services import ledger
 

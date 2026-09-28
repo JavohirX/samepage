@@ -244,7 +244,8 @@ def dry_run(event_id: str, *, actor: str, seed: int = 20260301, cap: int = 12, c
         params={"cap": cap, "coverage": coverage},
         report={
             **{key: report[key] for key in ("load_histogram", "achieved_max_load", "covered", "projects", "cap", "coverage")},
-            "assignments": len(report["assignments"]),
+            # A dry run issues nothing, so it keeps the count. Only a top-up lists the pairs it issued.
+            "n_assignments": len(report["assignments"]),
             "components": graph["components"],
             "articulation_judges": graph["articulation_judges"],
             "lower_bound": bound,
@@ -271,11 +272,27 @@ def _run_conflicts(run: AssignmentRun, report: dict):
     return len(_conflicts(run.event_id, list(pairs)))
 
 
+def _issued_pairs(report: dict) -> list[dict]:
+    """The pairs a top-up issued. Dry runs stored before n_assignments existed keep a bare count here."""
+    pairs = report.get("assignments")
+    return pairs if isinstance(pairs, list) else []
+
+
+def _assignment_count(report: dict):
+    if "n_assignments" in report:
+        return report["n_assignments"]
+    pairs = report.get("assignments")
+    if isinstance(pairs, list):
+        return len(pairs)
+    return pairs if isinstance(pairs, int) else ""
+
+
 def run_payload(run: AssignmentRun) -> dict:
     report = run.report or {}
     items = [
         {"key": "kind", "value": run.kind},
         {"key": "seed", "value": run.seed},
+        {"key": "assignments", "value": _assignment_count(report)},
         {"key": "achieved_max_load", "value": report.get("achieved_max_load", "")},
         {"key": "covered", "value": report.get("covered", "")},
         {"key": "projects", "value": report.get("projects", "")},
@@ -290,6 +307,7 @@ def run_payload(run: AssignmentRun) -> dict:
         "id": run.id,
         "kind": run.kind,
         "report": report,
+        "issued_pairs": _issued_pairs(report),
         "columns": ["key", "value"],
         "items": items,
         "count": len(items),
