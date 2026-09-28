@@ -13,7 +13,7 @@ from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework.exceptions import MethodNotAllowed, NotFound
 
-from samepage.apps.portal.models import AssignmentRun, Batch, Event, Person, RoleGrant, TeamMember
+from samepage.apps.portal.models import Assignment, AssignmentRun, Batch, Event, Person, RoleGrant, TeamMember
 from samepage.core.csrf import enforce_csrf
 from samepage.core.errors import Unprocessable, problem_response
 from samepage.core.headers import annotate
@@ -865,7 +865,11 @@ class NamedScoresView(SamepageView):
     action = "scores.read_named"
 
     def get(self, request, evt, jdg, fmt=None):
-        # The policy already compared jdg to the principal. Loading the rows is allowed.
+        # The policy already compared jdg to the principal. Loading the rows is allowed; an id
+        # that never judged this event is 404 for staff rather than an empty table.
+        is_judge = RoleGrant.objects.filter(event_id=evt, person_id=jdg, role="judge").exists()
+        if not is_judge and not Assignment.objects.filter(judge_id=jdg, submission__event_id=evt).exists():
+            raise NotFound("Unknown judge.")
         payload = ledger.score_payload(evt, {"judge": jdg})
         payload["title"] = f"Scores by {jdg}"
         payload["download_csv"] = f"/e/{evt}/judges/{jdg}/scores.csv"
