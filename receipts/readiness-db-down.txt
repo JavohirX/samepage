@@ -1,0 +1,4 @@
+production mode, database container stopped
+GET /healthz -> 200
+GET /readyz.json -> 503 application/problem+json; charset=utf-8
+GET /e/evt_01/projects.json -> 500 application/problem+json; charset=utf-8

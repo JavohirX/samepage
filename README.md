@@ -74,6 +74,7 @@ Every file here is the output of a command, copied from the CI run named in `rec
 - `receipts/oracle-statsmodels.txt`: `docker compose --profile oracle run --rm oracle` against that stack.
 - `receipts/production-refusal-demo-db.txt`: production mode started on a volume first seeded in demo mode, with real secrets. It refuses.
 - `receipts/production-mode.txt`: production mode on a fresh volume: it boots, and the demo sign-in and the demo organizer token are refused.
+- `receipts/readiness-db-down.txt`: the same stack with the database container stopped: `/healthz` 200, `/readyz.json` 503 problem+json, an API URL 500 problem+json.
 - `receipts/inputs.txt`: sha256 of `run.py` and `fixtures.json` (`python tools/task.py inputs`), identical to the organizers' files.
 
 ## What that proves
