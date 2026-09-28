@@ -17,6 +17,7 @@ from samepage.apps.portal.models import (
     JudgeTrack,
     Person,
     RoleGrant,
+    ScoreCurrent,
     ScoreRev,
     Submission,
     TeamMember,
@@ -200,7 +201,7 @@ def my_batches(event_id: str, judge_id: str) -> dict:
         .order_by(F("finalized_at").asc(nulls_first=True), "submission__position", "submission_id")
     )
     drafts = set(
-        ScoreRev.objects.filter(judge_id=judge_id, submission__event_id=event_id, state="draft").values_list(
+        ScoreCurrent.objects.filter(judge_id=judge_id, submission__event_id=event_id, state="draft").values_list(
             "submission_id", flat=True
         )
     )
@@ -638,7 +639,7 @@ def assignments_payload(event_id: str) -> dict:
         .order_by("judge_id", "submission_id")
     )
     drafts = set(
-        ScoreRev.objects.filter(submission__event_id=event_id, state="draft").values_list("judge_id", "submission_id")
+        ScoreCurrent.objects.filter(submission__event_id=event_id, state="draft").values_list("judge_id", "submission_id")
     )
     items = []
     for row in rows:
@@ -694,7 +695,7 @@ def judge_progress(event_id: str) -> list[dict]:
             entry["abandoned"] += 1
     drafts: dict[str, int] = {}
     for judge_id, _project in set(
-        ScoreRev.objects.filter(submission__event_id=event_id, state="draft").values_list("judge_id", "submission_id")
+        ScoreCurrent.objects.filter(submission__event_id=event_id, state="draft").values_list("judge_id", "submission_id")
     ):
         drafts[judge_id] = drafts.get(judge_id, 0) + 1
     rows = []

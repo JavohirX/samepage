@@ -171,9 +171,17 @@ def test_unlock_reopens_a_final_score_for_correction(client, bearer):
     assert unlocked.status_code == 200, unlocked.content
     row = next(r for r in _rows(client.get("/e/evt_01/scores.csv", **bearer("org"))) if r["id"] == "jdg_08:prj_15")
     assert row["counted"] == "false" and row["state"] == "unlocked"
+    def status():
+        rows = client.get("/e/evt_01/judge/batches.json", **bearer("jdg08")).json()["items"]
+        return next(row["status"] for row in rows if row["project_id"] == "prj_15")
+
+    assert status() == "to score"
+    client.post("/e/evt_01/judge/assignments/prj_15/scores.json", changed, content_type="application/json", **bearer("jdg08"))
+    assert status() == "draft saved"
     assert client.post("/e/evt_01/judge/assignments/prj_15/finalize.json", changed, content_type="application/json", **bearer("jdg08")).status_code == 200
+    assert status() == "final"
     states = list(ScoreRev.objects.filter(judge_id="jdg_08", submission_id="prj_15", criterion="quality").order_by("rev").values_list("state", "value"))
-    assert states == [("final", 5), ("unlocked", 5), ("final", 2)]
+    assert states == [("final", 5), ("unlocked", 5), ("draft", 2), ("final", 2)]
     assert AuditEvent.objects.filter(event_id="evt_01", action="score.unlock", object_ref="jdg_08:prj_15").exists()
     # Unlocking an imported fixture score works the same way; the chain stays intact.
     assert client.get("/e/evt_01/audit.json", **bearer("org")).json()["chain_ok"] == "true"
