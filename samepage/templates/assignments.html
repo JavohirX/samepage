@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page">
+  <h1>Assignments</h1>
+  <p class="tools"><a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a> <a href="/e/{{ event_id }}/progress">Progress</a></p>
+</header>
+<p class="meta">Every judge × project pair, with the run that issued it. "Reopen" unlocks a final score so the judge can correct it; the unlock is an audit event and the review stops counting until it is finalized again.</p>
+<div class="overflow-auto">
+<table>
+  <thead><tr><th>Judge</th><th>Project</th><th>Track</th><th>Batch</th><th>Run</th><th>Source</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+  {% for item in items %}
+  <tr>
+    <td><data data-field="judge_id" value="{{ item.judge_id }}">{{ item.judge_id }}</data></td>
+    <td><a href="/e/{{ event_id }}/projects/{{ item.project_id }}"><data data-field="project_id" value="{{ item.project_id }}">{{ item.project_id }}</data></a></td>
+    <td>{{ item.track }}</td><td>{{ item.batch_id }}</td><td><a href="/e/{{ event_id }}/assignment-runs/{{ item.run_id }}">{{ item.run_id }}</a></td><td>{{ item.source }}</td>
+    <td><data data-field="status" value="{{ item.status }}">{{ item.status }}</data></td>
+    <td>{% if item.status == "final" %}<form method="post" action="/e/{{ event_id }}/assignments/{{ item.judge_id }}/{{ item.project_id }}/unlock">{% csrf_token %}<button class="outline secondary" type="submit">Reopen</button></form>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

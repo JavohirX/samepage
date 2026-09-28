@@ -51,6 +51,7 @@ def seed(path: str) -> bool:
         _event_one(fixture)
         _event_two()
         _passwords_and_tokens()
+        _demo_batches(fixture)
     results.rebuild("evt_01", actor="importer")
     return True
 
@@ -71,7 +72,7 @@ def _event_one(fixture: dict) -> None:
         for row in fixture["tracks"]
     }
     for position, key in enumerate(("functionality", "quality", "innovation")):
-        Criterion.objects.create(event=event, track=None, key=key, weight=1, position=position)
+        Criterion.objects.create(event=event, track=None, key=key, label=key.capitalize(), weight=1, position=position)
     PrizeCategory.objects.create(id="prz_01", event=event, name="Grand prize")
 
     people: dict[str, Person] = {}
@@ -206,7 +207,7 @@ def _event_two() -> None:
     )
     Track.objects.create(id="trk_e2", event=event, name="Control")
     for position, key in enumerate(("functionality", "quality", "innovation")):
-        Criterion.objects.create(event=event, track=None, key=key, weight=1, position=position)
+        Criterion.objects.create(event=event, track=None, key=key, label=key.capitalize(), weight=1, position=position)
     person = Person.objects.create(
         id="per_control",
         email="control@example.org",
@@ -230,6 +231,66 @@ def _passwords_and_tokens() -> None:
             scopes=["demo"],
             demo=True,
         )
+
+
+DEMO_JUDGES = ("jdg_08", "jdg_03")
+
+
+def _demo_batches(fixture: dict) -> None:
+    """Demo only: one open batch for each demo judge, so the console has something to score.
+
+    The fixture's judges have finished (or abandoned) their batches, so on a fresh volume
+    Judge A and Judge B would have nothing left to do. Each gets two projects in their own
+    tracks that they have not reviewed, fewest reviews first. Nothing is scored for them.
+    The run is kind "manual", named run_demo, and audited like any other assignment.
+    """
+    from collections import Counter
+
+    reviews = Counter(score["project"] for score in fixture["scores"])
+    scored = {(score["judge"], score["project"]) for score in fixture["scores"]}
+    judge_tracks = {row["id"]: set(row.get("tracks") or []) for row in fixture["judges"]}
+    projects = {row["id"]: row for row in fixture["projects"]}
+    active = set(
+        Submission.objects.filter(event_id="evt_01", state="submitted").values_list("id", flat=True)
+    )
+    run = AssignmentRun.objects.create(
+        id="run_demo",
+        event_id="evt_01",
+        kind="manual",
+        seed=0,
+        params={"source": "demo seed: open work for the demo judges"},
+        report={},
+    )
+    issued = []
+    for judge_id in DEMO_JUDGES:
+        candidates = sorted(
+            (
+                project_id
+                for project_id, row in projects.items()
+                if project_id in active
+                and row["track"] in judge_tracks.get(judge_id, set())
+                and (judge_id, project_id) not in scored
+            ),
+            key=lambda project_id: (reviews[project_id], project_id),
+        )[:2]
+        if not candidates:
+            continue
+        batch = Batch.objects.create(
+            id=f"bat_demo_{judge_id}", event_id="evt_01", judge_id=judge_id, run=run, state="issued"
+        )
+        for project_id in candidates:
+            Assignment.objects.create(batch=batch, judge_id=judge_id, submission_id=project_id, source="manual")
+            issued.append({"project_id": project_id, "judge_id": judge_id})
+    run.report = {"assignments": issued, "coi_violations": 0}
+    run.save(update_fields=["report"])
+    audit.append(
+        "evt_01",
+        "seed",
+        "assignment.manual",
+        run.id,
+        None,
+        {"assignments": [f"{row['project_id']}:{row['judge_id']}" for row in issued], "demo": True},
+    )
 
 
 def banner(port: int = 8080) -> str:

@@ -27,6 +27,22 @@
   {% for metric in payload.metrics %}{% if metric.matches_csv == "false" %}<li>{{ metric.label }}: page says {{ metric.value }}, <a href="{{ metric.href }}">CSV</a> has {{ metric.csv_rows }} rows</li>{% endif %}{% endfor %}
 </ul>
 {% endif %}
+<h2>Judges</h2>
+<p class="meta">Open work first: a judge with open assignments is behind. <a href="/e/{{ event_id }}/assignments">Every assignment</a> (<a href="/e/{{ event_id }}/assignments.csv">CSV</a>).</p>
+<div class="overflow-auto">
+<table>
+  <thead><tr><th>Judge</th><th>Assigned</th><th>Finalized</th><th>Open</th><th>Drafts</th><th>Abandoned</th></tr></thead>
+  <tbody>
+  {% for j in payload.judges %}
+  <tr{% if j.behind == "true" %} class="behind"{% endif %}>
+    <td>{{ j.name }} <span class="id">{{ j.judge_id }}</span></td>
+    <td>{{ j.assigned }}</td><td>{{ j.finalized }}</td>
+    <td><data data-field="open" value="{{ j.open }}">{{ j.open }}</data></td><td>{{ j.drafts }}</td><td>{{ j.abandoned }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
 <h2>Batches</h2>
 <div class="overflow-auto">
 <table>
@@ -49,14 +65,30 @@
   </tbody>
 </table>
 </div>
+<h2>Assign</h2>
+<form method="post" action="/e/{{ event_id }}/assignment-runs" class="inline">
+  {% csrf_token %}
+  <input type="hidden" name="kind" value="initial">
+  <label class="inline">Reviews per project <input type="number" name="coverage" value="3" min="1" max="10"></label>
+  <label class="inline">Most per judge <input type="number" name="cap" value="12" min="1" max="60"></label>
+  <button type="submit">Issue batches</button>
+</form>
+<p class="meta">Issues batches until every submitted project has that many reviewers, counting assignments that already exist. Track eligibility and conflicts of interest are enforced; the run is audited.</p>
 <form method="post" action="/e/{{ event_id }}/assignment-runs">
   {% csrf_token %}
   <input type="hidden" name="kind" value="dry_run">
-  <button type="submit">Dry-run a fresh assignment</button>
+  <button class="outline" type="submit">Dry-run a fresh assignment</button>
 </form>
 <form method="post" action="/e/{{ event_id }}/assignment-runs">
   {% csrf_token %}
   <input type="hidden" name="kind" value="topup">
   <button class="secondary" type="submit">Top up short projects</button>
 </form>
+<form method="post" action="/e/{{ event_id }}/assignments" class="inline">
+  {% csrf_token %}
+  <input name="judge" placeholder="judge id, e.g. jdg_08" required aria-label="Judge id">
+  <input name="project" placeholder="project id, e.g. prj_15" required aria-label="Project id">
+  <button class="outline" type="submit">Assign one</button>
+</form>
+<p class="meta">A finalized score is reopened from the <a href="/e/{{ event_id }}/assignments">assignments page</a> (audited, refused after publish).</p>
 {% endblock %}

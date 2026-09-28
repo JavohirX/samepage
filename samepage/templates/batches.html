@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block main %}
-<header class="page"><h1>Your batches</h1></header>
+<header class="page"><h1>Your batches</h1><p class="tools"><a href="{{ payload.download_csv }}">CSV</a> <a href="{{ payload.download_json }}">JSON</a></p></header>
+<p><data data-field="open" value="{{ payload.open }}">{{ payload.open }}</data> to finish.</p>
 {% if items %}
 <ul class="events">
   {% for item in items %}
   <li>
     <a href="/e/{{ event_id }}/judge/assignments/{{ item.project_id }}">{{ item.title }}</a>
-    <span class="meta">{{ item.track }} · {{ item.finalized }}</span>
+    <span class="meta">{{ item.track }} · <data data-field="status" value="{{ item.status }}">{{ item.status }}</data>{% if item.batch_state == "abandoned" %} · batch abandoned{% endif %}</span>
   </li>
   {% endfor %}
 </ul>

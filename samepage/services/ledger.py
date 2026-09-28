@@ -20,14 +20,8 @@ from samepage.apps.portal.models import (
 )
 from samepage.domain.weighted import fraction_text, weighted_total
 
-SCORE_COLUMNS = [
-    "id",
-    "judge_id",
-    "project_id",
-    "track",
-    "c_functionality",
-    "c_quality",
-    "c_innovation",
+SCORE_HEAD = ["id", "judge_id", "project_id", "track"]
+SCORE_TAIL = [
     "weighted_total",
     "comment",
     "state",
@@ -36,6 +30,8 @@ SCORE_COLUMNS = [
     "merged_into",
     "audit_seq",
 ]
+# The fixture's rubric. An event with other criteria gets c_<key> columns for its own keys.
+SCORE_COLUMNS = SCORE_HEAD + ["c_functionality", "c_quality", "c_innovation"] + SCORE_TAIL
 
 
 def weights_for(event_id: str) -> dict[str, str]:
@@ -46,8 +42,22 @@ def weights_for(event_id: str) -> dict[str, str]:
     return {"functionality": "1", "quality": "1", "innovation": "1"}
 
 
+def track_weights(event_id: str) -> dict[str, dict[str, str]]:
+    """Per-track weights: the event's weights, with any track override on top."""
+    base = weights_for(event_id)
+    merged: dict[str, dict[str, str]] = {}
+    for row in Criterion.objects.filter(event_id=event_id, track__isnull=False):
+        if row.key in base:
+            merged.setdefault(row.track_id, dict(base))[row.key] = str(row.weight)
+    return merged
+
+
 def criterion_keys(event_id: str) -> list[str]:
     return list(weights_for(event_id))
+
+
+def score_columns(event_id: str) -> list[str]:
+    return SCORE_HEAD + [f"c_{key}" for key in criterion_keys(event_id)] + SCORE_TAIL
 
 
 def review_rows(event_id: str) -> list[dict]:
@@ -68,28 +78,40 @@ def review_rows(event_id: str) -> list[dict]:
         slot["states"].append(row.state)
         slot["audit"].append(row.audit_seq)
     weights = weights_for(event_id)
+    per_track = track_weights(event_id)
+    keys = list(weights)
     items = []
     for (judge_id, submission_id), slot in grouped.items():
         submission = slot["submission"]
         counted, reason, counts_as = _count(submission)
+        own_weights = per_track.get(submission.track_id, weights)
         try:
-            total = weighted_total(slot["criteria"], weights)
+            total = weighted_total(slot["criteria"], own_weights)
             total_text = fraction_text(total)
         except ValueError:
             total = None
             total_text = ""
         comment = slot["comments"][0] if slot["comments"] else ""
-        state = "final" if slot["states"] and all(item == "final" for item in slot["states"]) else slot["states"][0] if slot["states"] else ""
+        final = bool(slot["states"]) and all(item == "final" for item in slot["states"])
+        state = "final" if final else ("draft" if "draft" in slot["states"] else slot["states"][0] if slot["states"] else "")
+        if counted and not final:
+            # Only a finalized review counts. A draft or a reopened (unlocked) score is in the ledger, not in the fit.
+            counted, reason, counts_as = False, f"not_final:{state}", None
+        elif counted and total is None:
+            counted, reason, counts_as = False, "incomplete_rubric", None
+        row = {
+            "id": f"{judge_id}:{submission_id}",
+            "judge_id": judge_id,
+            "project_id": submission_id,
+            "track": submission.track_id,
+            "criteria": slot["criteria"],
+            "weights": own_weights,
+        }
+        for key in keys:
+            row[f"c_{key}"] = slot["criteria"].get(key, "")
         items.append(
             {
-                "id": f"{judge_id}:{submission_id}",
-                "judge_id": judge_id,
-                "project_id": submission_id,
-                "track": submission.track_id,
-                "criteria": slot["criteria"],
-                "c_functionality": slot["criteria"].get("functionality", ""),
-                "c_quality": slot["criteria"].get("quality", ""),
-                "c_innovation": slot["criteria"].get("innovation", ""),
+                **row,
                 "weighted_total": total_text,
                 "weighted_value": None if total is None else float(total),
                 "comment": comment,
@@ -138,13 +160,15 @@ def filter_reviews(rows: list[dict], query) -> list[dict]:
 
 def score_payload(event_id: str, query) -> dict:
     rows = filter_reviews(review_rows(event_id), query)
-    items = [{key: row[key] for key in SCORE_COLUMNS} for row in rows]
+    columns = score_columns(event_id)
+    items = [{key: row.get(key, "") for key in columns} for row in rows]
     return {
         "title": "Scores",
         "event": event_id,
         "resource": "scores",
         "count": len(items),
-        "columns": SCORE_COLUMNS,
+        "columns": columns,
+        "numeric_columns": [column for column in columns if column.startswith("c_")],
         "items": items,
         "html_omitted": {},
         "download_csv": f"/e/{event_id}/scores.csv",
@@ -165,9 +189,10 @@ def counted_for_engine(event_id: str) -> tuple[list[dict], dict]:
                 "project_id": row["counts_as"],
                 "judge_id": row["judge_id"],
                 "criteria": row["criteria"],
+                "weights": row["weights"],
             }
         )
-    for submission in Submission.objects.filter(event_id=event_id).exclude(state="withdrawn"):
+    for submission in Submission.objects.filter(event_id=event_id).exclude(state__in=("withdrawn", "draft")):
         meta[submission.id] = {
             "title": submission.title,
             "track": submission.track_id,
@@ -189,7 +214,9 @@ def progress_payload(event_id: str) -> dict:
         if row["counted"] == "true":
             per_project[row["project_id"]] += 1
     active = list(
-        Submission.objects.filter(event_id=event_id).exclude(state="withdrawn").values_list("id", flat=True)
+        Submission.objects.filter(event_id=event_id)
+        .exclude(state__in=("withdrawn", "draft"))
+        .values_list("id", flat=True)
     )
     full = sum(1 for project_id in active if per_project[project_id] >= 3)
     short = sum(1 for project_id in active if per_project[project_id] < 3)
@@ -234,10 +261,17 @@ def progress_payload(event_id: str) -> dict:
         "recount": {"matched": matched, "total": len(metrics)},
         "provisional": list(provisional),
         "batches": batch_rows(event_id),
+        "judges": _judge_progress(event_id),
         "download_csv": f"/e/{event_id}/progress.csv",
         "download_json": f"/e/{event_id}/progress.json",
         "html_omitted": {},
     }
+
+
+def _judge_progress(event_id: str) -> list[dict]:
+    from samepage.services.judging import judge_progress
+
+    return judge_progress(event_id)
 
 
 def csv_data_rows(payload: dict) -> int:
@@ -297,7 +331,22 @@ def batch_rows(event_id: str) -> list[dict]:
     return items
 
 
-def project_rows(event_id: str, *, include_withdrawn: bool, query, paginate: bool = True) -> dict:
+def _many(query, key: str) -> list[str]:
+    """?track=a&track=b, or ?track=a,b. A QueryDict or a plain dict."""
+    if hasattr(query, "getlist"):
+        raw = query.getlist(key)
+    else:
+        value = query.get(key)
+        raw = value if isinstance(value, list) else ([value] if value else [])
+    values = []
+    for item in raw:
+        values.extend(part.strip() for part in str(item).split(",") if part.strip())
+    return list(dict.fromkeys(values))
+
+
+def project_rows(
+    event_id: str, *, include_withdrawn: bool, query, paginate: bool = True, include_drafts: bool = False
+) -> dict:
     rows = review_rows(event_id)
     per = defaultdict(int)
     for row in rows:
@@ -306,6 +355,9 @@ def project_rows(event_id: str, *, include_withdrawn: bool, query, paginate: boo
     qs = Submission.objects.filter(event_id=event_id).select_related("track", "team")
     if not include_withdrawn:
         qs = qs.exclude(state="withdrawn")
+    if not include_drafts:
+        # A draft is the team's work in progress. The public gallery lists submitted projects only.
+        qs = qs.exclude(state="draft")
     state = query.get("state")
     if state == "withdrawn":
         qs = Submission.objects.filter(event_id=event_id, state="withdrawn").select_related("track", "team")
@@ -313,15 +365,19 @@ def project_rows(event_id: str, *, include_withdrawn: bool, query, paginate: boo
         qs = qs.filter(state=state)
     review = query.get("review")
     q = (query.get("q") or "").strip()
-    track = query.get("track") or ""
-    tag = query.get("tag") or ""
+    tracks = _many(query, "track")
+    tags = _many(query, "tag")
     items = []
     for submission in qs.order_by("position", "id"):
-        if q and q.casefold() not in " ".join([submission.title, submission.tagline, submission.description]).casefold():
+        haystack = " ".join(
+            [submission.title, submission.tagline, submission.description, " ".join(submission.tech_tags or [])]
+        )
+        if q and q.casefold() not in haystack.casefold():
             continue
-        if track and submission.track_id != track and submission.track.name != track:
+        # Tracks: any of the chosen tracks. Tags: every chosen tag.
+        if tracks and submission.track_id not in tracks and submission.track.name not in tracks:
             continue
-        if tag and tag not in (submission.tech_tags or []):
+        if tags and not set(tags) <= set(submission.tech_tags or []):
             continue
         n = per[submission.id]
         if review == "full" and n < 3:
@@ -382,9 +438,18 @@ def project_rows(event_id: str, *, include_withdrawn: bool, query, paginate: boo
             "repo_url",
         ],
         "items": window,
-        "tracks": [{"id": row.id, "name": row.name} for row in Track.objects.filter(event_id=event_id)],
+        "tracks": [
+            {"id": row.id, "name": row.name, "checked": row.id in tracks}
+            for row in Track.objects.filter(event_id=event_id).order_by("id")
+        ],
+        "tags": [
+            {"name": tag, "checked": tag in tags}
+            for tag in sorted(
+                {tag for values in qs.values_list("tech_tags", flat=True) for tag in (values or [])} | set(tags)
+            )
+        ],
         "download_csv": f"/e/{event_id}/projects.csv",
         "download_json": f"/e/{event_id}/projects.json",
         "html_omitted": {},
-        "filters": {"q": q, "track": track, "tag": tag, "state": state or "", "review": review or ""},
+        "filters": {"q": q, "track": ",".join(tracks), "tag": ",".join(tags), "state": state or "", "review": review or ""},
     }

@@ -6,6 +6,11 @@
   <p class="tools"><a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a></p>
 </header>
 <p>{{ payload.story }}</p>
+{% if payload.published %}
+<p class="banner">Published {{ payload.published_at }} UTC. This is the frozen snapshot #{{ payload.snapshot_seq }}; scores, weights, duplicates and assignments can no longer change.</p>
+{% else %}
+<p class="meta">Not published. Fitted on every counted (finalized) review up to audit event #{{ payload.reflects_audit_seq }}; a new score refits on the next read.</p>
+{% endif %}
 <p class="banner">{{ payload.banner }}</p>
 <p class="meta">method <data data-field="method" value="{{ payload.method }}">{{ payload.method }}</data>
   · λ <data data-field="lambda" value="{{ payload.lambda }}">{{ payload.lambda }}</data>
@@ -34,7 +39,8 @@
 </table>
 </div>
 {% if is_staff and not payload.published %}
+{% if payload.open_duplicates %}<p class="banner">Confirm {% for dup in payload.open_duplicates %}<a href="/e/{{ event_id }}/duplicates/{{ dup }}">{{ dup }}</a>{% if not forloop.last %}, {% endif %}{% endfor %} before publishing.</p>{% endif %}
 <form method="post" action="/e/{{ event_id }}/publish">{% csrf_token %}<button type="submit">Publish results</button></form>
-<p class="meta">Publishing is refused while a duplicate decision is still provisional.</p>
+<p class="meta">Publishing is refused while a duplicate decision is still provisional, and it freezes the ranking.</p>
 {% endif %}
 {% endblock %}

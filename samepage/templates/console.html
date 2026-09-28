@@ -2,25 +2,35 @@
 {% load static %}
 {% block main %}
 <header class="page">
-  <p class="kicker">{{ payload.track }} · {{ payload.project_id }}</p>
-  <h1>{{ payload.title }}</h1>
-  <p>{{ payload.tagline }}</p>
+  <div>
+    <p class="kicker">{{ payload.track }} · {{ payload.project_id }}</p>
+    <h1>{{ payload.title }}</h1>
+    <p>{{ payload.tagline }}</p>
+  </div>
+  <p class="tools"><a href="/e/{{ event_id }}/judge/batches">All my projects</a></p>
 </header>
-<p data-save-status class="meta">{% if payload.finalized %}final{% else %}not yet final{% endif %}</p>
+{% if payload.description %}<p>{{ payload.description|linebreaksbr }}</p>{% endif %}
+<p class="meta">
+  {% if payload.repo_url %}<a href="{{ payload.repo_url }}" rel="nofollow noopener">repo</a> · {% endif %}
+  {% if payload.live_url %}<a href="{{ payload.live_url }}" rel="nofollow noopener">live</a> · {% endif %}
+  {% if payload.video_url %}<a href="{{ payload.video_url }}" rel="nofollow noopener">video</a> · {% endif %}
+  <a href="/e/{{ event_id }}/projects/{{ payload.project_id }}">project page</a>
+</p>
+<p data-save-status class="meta">{% if payload.finalized %}final{% else %}{{ payload.state }}, not yet final{% endif %}</p>
 <form method="post" action="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/scores" data-console data-autosave="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/scores.json" data-csrf="{{ csrf_token }}">
   {% csrf_token %}
   {% for row in payload.criteria %}
-  <label>{{ row.key }}
+  <label>{{ row.label }}
     <input name="c_{{ row.key }}" type="number" min="1" max="5" required value="{{ row.value }}" data-criterion="{{ row.key }}">
   </label>
   {% endfor %}
   <label>Comment
     <textarea name="comment">{{ payload.comment }}</textarea>
   </label>
-  <button type="submit">Save</button>
+  <button type="submit">Save draft</button>
   {# Finalize submits this same form, so it finalizes the values on screen, not the ones the page loaded with. #}
   <button class="secondary" type="submit" formaction="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/finalize">Finalize</button>
 </form>
-<p class="meta">Keys 1–5 score the selected criterion. J and K move between criteria. Autosave needs JavaScript. The buttons work without it.</p>
+<p class="meta">Keys 1–5 score the selected criterion. J and K move between criteria. Autosave needs JavaScript. The buttons work without it. A draft is not counted in the results until you finalize it.</p>
 <script src="{% static 'console.js' %}"></script>
 {% endblock %}

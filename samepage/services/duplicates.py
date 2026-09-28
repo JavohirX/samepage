@@ -8,7 +8,8 @@ from rest_framework.exceptions import NotFound
 from samepage.apps.portal.models import DuplicateGroup, Submission
 from samepage.domain.transitions import transition
 from samepage.engine.snapshot import build_snapshot, rank_project
-from samepage.services import audit, results
+from samepage.services import audit
+from samepage.services.guards import refuse_if_published
 from samepage.services.ledger import review_rows, weights_for
 
 
@@ -49,19 +50,27 @@ def preview_ranks(event_id: str, members: list[Submission]) -> dict:
     def fit(mode: str):
         reviews = []
         for row in rows:
-            if not row["criteria"]:
+            if not row["criteria"] or row["state"] != "final" or row["weighted_value"] is None:
+                # Only finalized, complete reviews count, as in the real fit.
                 continue
             project = row["project_id"]
             if project in earlier:
                 if mode == "merge":
                     reviews.append(
-                        {"project_id": latest.id, "judge_id": row["judge_id"], "criteria": row["criteria"]}
+                        {
+                            "project_id": latest.id,
+                            "judge_id": row["judge_id"],
+                            "criteria": row["criteria"],
+                            "weights": row["weights"],
+                        }
                     )
                 continue
             target = row["counts_as"] or (project if project == latest.id else None)
             if target is None:
                 continue
-            reviews.append({"project_id": target, "judge_id": row["judge_id"], "criteria": row["criteria"]})
+            reviews.append(
+                {"project_id": target, "judge_id": row["judge_id"], "criteria": row["criteria"], "weights": row["weights"]}
+            )
         meta = {
             row.id: {
                 "title": row.title,
@@ -136,6 +145,8 @@ def confirm(event_id: str, group_id: str, actor_id: str, resolution: str | None 
     group = DuplicateGroup.objects.select_for_update().filter(event_id=event_id, id=group_id).first()
     if group is None:
         raise NotFound("Unknown decision.")
+    # After publish the decision is part of the published ranking and cannot be switched.
+    refuse_if_published(event_id)
     transition("duplicate", group.status, "confirmed")
     if resolution:
         if resolution not in {"keep_latest", "merge"}:
@@ -147,7 +158,7 @@ def confirm(event_id: str, group_id: str, actor_id: str, resolution: str | None 
     group.resolved_by = actor_id
     group.save()
     apply(group, actor=actor_id, reason=f"confirmed {group.resolution}")
-    results.rebuild(event_id, actor=actor_id, cause=group.audit_seq)
+    # The next read of results or the lab sees a changed fingerprint and refits (results.fresh).
     return group
 
 

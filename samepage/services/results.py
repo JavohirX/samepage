@@ -1,17 +1,27 @@
-"""Snapshots, the lab, and publish. The CSV ledger does not wait on this module."""
+"""Snapshots, the lab, and publish. The CSV ledger does not wait on this module.
+
+A snapshot records the fingerprint of its inputs (counted reviews with their weights, the
+projects being ranked, the event's judges). Before publish, a read whose fingerprint no
+longer matches refits first, so the ranking is never stale. Publish stamps one snapshot;
+from then on every reader gets that snapshot, and the write paths refuse changes (guards.py).
+"""
 
 from __future__ import annotations
 
+import hashlib
 import time
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import NotFound
 
-from samepage.apps.portal.models import Event, Person, ResultsSnapshot, RoleGrant
+from samepage.apps.portal.models import AuditEvent, Event, Person, ResultsSnapshot, RoleGrant
 from samepage.core.errors import Conflict
+from samepage.domain.canonical import canonical
 from samepage.engine.snapshot import build_snapshot
 from samepage.services import audit
+from samepage.services.guards import FROZEN
 from samepage.services.ledger import counted_for_engine, weights_for
 
 
@@ -32,17 +42,44 @@ def latest(event_id: str) -> ResultsSnapshot | None:
     return ResultsSnapshot.objects.filter(event_id=event_id).order_by("-seq").first()
 
 
+def _inputs(event_id: str) -> tuple[list[dict], dict, dict, list[str], str]:
+    reviews, meta = counted_for_engine(event_id)
+    weights = weights_for(event_id)
+    # Every judge on the event, so a judge with no counted review is flagged rather than invisible.
+    present = sorted(
+        RoleGrant.objects.filter(event_id=event_id, role="judge").values_list("person_id", flat=True)
+    )
+    material = {
+        "reviews": sorted(
+            [
+                review["project_id"],
+                review["judge_id"],
+                sorted(review["criteria"].items()),
+                sorted((review.get("weights") or weights).items()),
+            ]
+            for review in reviews
+        ),
+        "projects": sorted([key, value.get("track", ""), value.get("submitted_at", "")] for key, value in meta.items()),
+        "weights": sorted(weights.items()),
+        "judges": present,
+    }
+    fingerprint = hashlib.sha256(canonical(material).encode("utf-8")).hexdigest()
+    return reviews, meta, weights, present, fingerprint
+
+
+def fingerprint(event_id: str) -> str:
+    return _inputs(event_id)[4]
+
+
 def rebuild(event_id: str, *, actor: str = "engine", cause: int | None = None) -> ResultsSnapshot:
     started = time.perf_counter()
     budget = settings.ENGINE_BOOT_BUDGET_S
     previous = latest(event_id)
     seq = 1 if previous is None else previous.seq + 1
-    reviews, meta = counted_for_engine(event_id)
-    weights = weights_for(event_id)
-    # Every judge on the event, so a judge with no counted review is flagged rather than invisible.
-    present = list(
-        RoleGrant.objects.filter(event_id=event_id, role="judge").values_list("person_id", flat=True)
-    )
+    reviews, meta, weights, present, digest = _inputs(event_id)
+    if cause is None:
+        # The snapshot reflects the audit log up to this row.
+        cause = AuditEvent.objects.filter(event_id=event_id).order_by("-seq").values_list("seq", flat=True).first()
     method = "reml"
     payload: dict
     if budget <= 0:
@@ -58,6 +95,7 @@ def rebuild(event_id: str, *, actor: str = "engine", cause: int | None = None) -
                 method = "raw_fallback"
             else:
                 payload = snapshot
+                method = snapshot.get("method") or "reml"
         except Exception as exc:
             payload = _fallback(reviews, meta, exc.__class__.__name__)
             method = "raw_fallback"
@@ -72,8 +110,39 @@ def rebuild(event_id: str, *, actor: str = "engine", cause: int | None = None) -
         payload=payload,
         cause_audit_seq=cause,
         seconds=seconds,
+        input_fingerprint=digest,
     )
     return row
+
+
+def published_snapshot(event_id: str) -> ResultsSnapshot | None:
+    return (
+        ResultsSnapshot.objects.filter(event_id=event_id, published_at__isnull=False).order_by("-seq").first()
+    )
+
+
+def fresh(event_id: str) -> ResultsSnapshot:
+    """The latest snapshot, refitted first if its inputs changed since it was built."""
+    snapshot = latest(event_id)
+    if snapshot is not None and snapshot.input_fingerprint == fingerprint(event_id):
+        return snapshot
+    with transaction.atomic():
+        # One refit at a time per event; a second reader waits here and then finds it fresh.
+        Event.objects.select_for_update().filter(id=event_id).first()
+        snapshot = latest(event_id)
+        if snapshot is not None and snapshot.input_fingerprint == fingerprint(event_id):
+            return snapshot
+        return rebuild(event_id)
+
+
+def current(event_id: str) -> ResultsSnapshot | None:
+    """What a reader sees: the published snapshot once published, else a fresh one."""
+    state = Event.objects.filter(id=event_id).values_list("state", flat=True).first()
+    if state is None:
+        raise NotFound("Unknown event.")
+    if state in FROZEN:
+        return published_snapshot(event_id) or latest(event_id)
+    return fresh(event_id)
 
 
 def _fallback(reviews, meta, reason: str) -> dict:
@@ -138,7 +207,7 @@ def _fallback(reviews, meta, reason: str) -> dict:
 
 
 def _rows(event_id: str) -> tuple[ResultsSnapshot | None, list[dict]]:
-    snapshot = latest(event_id)
+    snapshot = current(event_id)
     if snapshot is None:
         return None, []
     return snapshot, list(snapshot.payload.get("rows") or [])
@@ -206,12 +275,18 @@ def results_payload(event_id: str) -> dict:
         "download_csv": f"/e/{event_id}/results.csv",
         "download_json": f"/e/{event_id}/results.json",
         "html_omitted": {"flags": "short (fewer than 3 counted reviews) is in the CSV and JSON; judge flags are on the lab page"},
-        "published": Event.objects.filter(id=event_id, state="published").exists(),
+        "published": Event.objects.filter(id=event_id, state__in=FROZEN).exists(),
+        "published_at": snapshot.published_at.strftime("%Y-%m-%dT%H:%M:%SZ") if snapshot and snapshot.published_at else "",
+        "snapshot_seq": snapshot.seq if snapshot else "",
+        "reflects_audit_seq": snapshot.cause_audit_seq if snapshot else "",
+        "open_duplicates": list(
+            Event.objects.get(id=event_id).duplicates.filter(status="provisional").values_list("id", flat=True)
+        ),
     }
 
 
 def lab_payload(event_id: str, table: str | None = None) -> dict:
-    snapshot = latest(event_id)
+    snapshot = current(event_id)
     payload = snapshot.payload if snapshot else {}
     rows = list(payload.get("rows") or [])
     ablation_items = []
@@ -329,23 +404,32 @@ def lab_payload(event_id: str, table: str | None = None) -> dict:
     }
 
 
+@transaction.atomic
 def publish(event_id: str, actor: Person) -> Event:
-    event = Event.objects.select_for_update().get(id=event_id)
+    event = Event.objects.select_for_update().filter(id=event_id).first()
+    if event is None:
+        raise NotFound("Unknown event.")
     open_dups = list(event.duplicates.filter(status="provisional").values_list("id", flat=True))
     if open_dups:
         names = ", ".join(open_dups)
         raise Conflict(f"{len(open_dups)} provisional decision ({names}) must be confirmed before publishing")
-    if event.state == "published":
+    if event.state in FROZEN:
         return event
     from samepage.domain.transitions import transition
 
     transition("event", event.state, "published")
+    # The ranking that goes public is fitted on the inputs as they are now, not a stale one.
+    snapshot = fresh(event_id)
     event.state = "published"
     event.save(update_fields=["state"])
-    seq = audit.append(event_id, actor.id, "results.publish", event_id, {"state": "judging"}, {"state": "published"})
-    snapshot = latest(event_id)
-    if snapshot is not None:
-        snapshot.published_at = timezone.now()
-        snapshot.cause_audit_seq = seq
-        snapshot.save(update_fields=["published_at", "cause_audit_seq"])
+    audit.append(
+        event_id,
+        actor.id,
+        "results.publish",
+        event_id,
+        {"state": "judging"},
+        {"state": "published", "snapshot_seq": snapshot.seq, "ranking_sha256": snapshot.ranking_sha256},
+    )
+    snapshot.published_at = timezone.now()
+    snapshot.save(update_fields=["published_at"])
     return event

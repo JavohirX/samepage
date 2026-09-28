@@ -58,12 +58,17 @@ def _rank_map(rows: list[dict], score_key: str) -> dict[str, int]:
     return {row["id"]: index for index, row in enumerate(ordered, start=1)}
 
 
+def _total(review: dict, weights: dict):
+    """A review's weighted rubric total. A review may carry its track's weights; else the event's."""
+    return weighted_total(review["criteria"], review.get("weights") or weights)
+
+
 def _fit_arrays(reviews: list[dict], weights: dict):
     project_ids = []
     judge_ids = []
     values = []
     for review in reviews:
-        total = weighted_total(review["criteria"], weights)
+        total = _total(review, weights)
         project_ids.append(review["project_id"])
         judge_ids.append(review["judge_id"])
         values.append(float(total))
@@ -133,7 +138,7 @@ def build_snapshot(
                 "raw_mean_exact": fraction_text(
                     sum(
                         (
-                            weighted_total(review["criteria"], weights)
+                            _total(review, weights)
                             for review in reviews
                             if review["project_id"] == project
                         ),

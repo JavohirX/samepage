@@ -27,9 +27,11 @@ def require(principal, action: str, *, event_id: str | None = None, target: str 
     roles = roles_of(principal, event_id)
     published = False
     if action == "results.read" and event_id:
-        published = Event.objects.filter(id=event_id, state="published").exists()
+        published = Event.objects.filter(id=event_id, state__in=("published", "archived")).exists()
     target_is_self = bool(principal is not None and target and target == principal.id)
-    if policy.allows(roles, action, target_is_self=target_is_self, published=published):
+    if policy.allows(
+        roles, action, target_is_self=target_is_self, published=published, signed_in=principal is not None
+    ):
         return roles
     # Unpublished results are a refusal, including for anonymous visitors.
     # Other protected pages answer 401 so a browser gets the sign-in form.
