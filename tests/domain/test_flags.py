@@ -18,3 +18,11 @@ def test_straight_line_is_jdg_07_only_and_equal_totals_are_a_separate_flag():
     # jdg_01 scored only the withdrawn Dry Harbour row, so it has no counted review.
     assert flags["zero_counted"] == ["jdg_01"]
     assert len(flags["at_most_two"]) == 8
+
+
+def test_sensitivity_same_top5_compares_the_set():
+    reviews, meta, weights = load_counted(ROOT / "fixtures.json")
+    snapshot = build_snapshot(reviews, meta, weights, with_lojo=False, with_draws=False)
+    base = set(snapshot["top5"])
+    for row in snapshot["sensitivity"]:
+        assert row["top5_same"] == (set(row["top5"]) == base)

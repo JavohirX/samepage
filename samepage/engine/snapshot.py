@@ -289,7 +289,8 @@ def _sensitivity(x, z, y, projects, ordered, lam_hat) -> list[dict]:
                 "lambda": lam,
                 "loglik": llf,
                 "top5": top,
-                "top5_same": top == base_top,
+                # The same five projects, in any order (the column is labelled "Same top 5").
+                "top5_same": set(top) == set(base_top),
                 "is_hat": abs(lam - lam_hat) < 1e-9,
             }
         )

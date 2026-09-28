@@ -1,4 +1,4 @@
-"""The grid and the deduplicated fixture. Research cross-checks, not golden copies of a hidden file."""
+"""Engine refit of the deduplicated fixture: the grid's λ, the top-5 set, Dry Harbour's rank, short projects."""
 
 import json
 from pathlib import Path
