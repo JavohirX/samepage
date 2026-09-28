@@ -77,6 +77,8 @@ docker compose --profile ops run --rm restore
 
 Take a backup before every upgrade. `backups/` holds password hashes and token digests; it is in `.gitignore` and `.dockerignore`.
 
+`backup` writes `backups/latest/db.dump` (`pg_dump -Fc`, which includes the uploaded images, D13) and `backups/latest/media.tar`, replacing the previous `latest`. `restore` runs `pg_restore --clean --if-exists` into the running database, so everything written after the backup is gone, and then unpacks the tar. CI proves the round trip on the demo stack with `python tools/verify.py backup` (receipts/backup-restore.txt): back up, merge the Dry Harbour duplicate, restore, and `scores.csv`, the audit log and its chain, and the duplicate decision must equal what they were at the backup.
+
 ## Local, without Docker
 
 Python 3.12 (the exact-fraction formatting needs it) and a running Postgres. The entrypoint does the same steps as in the container; on Windows it serves with `runserver` instead of gunicorn.

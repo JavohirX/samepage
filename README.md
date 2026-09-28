@@ -72,15 +72,14 @@ The oracle image holds statsmodels, pandas and scipy and no Samepage code. It do
 
 ## Receipts
 
-Every file here is the output of a command, copied from the CI run named in `receipts/ci-run.txt` (`gh run view`), not typed:
+Every file here is the output of a command, not typed. CI (`.github/workflows/acceptance.yml`) writes them with `tools/verify.py` (standard library only). After a green run, `python tools/verify.py fetch` copies them from it with `gh run download` and writes `receipts/ci-run.txt`, which names the run, the commit and each job's conclusion. `fetch` refuses a run that is not green, a run whose amd64 and arm64 reports differ, and a run that tested code other than this checkout's (only receipts and `*.md` may have changed since).
 
-- `acceptance-report.txt`: `python3 run.py .dogfood.toml` against a cold `docker compose up` on amd64 (arm64 gives the same bytes).
-- `receipts/oracle-statsmodels.txt`: `docker compose --profile oracle run --rm oracle` against that stack.
-- `receipts/production-refusal-demo-db.txt`: production mode started on a volume first seeded in demo mode, with real secrets. It refuses.
-- `receipts/production-mode.txt`: production mode on a fresh volume: it boots, and the demo sign-in and the demo organizer token are refused.
-- `receipts/readiness-db-down.txt`: the same stack with the database container stopped: `/healthz` 200, `/readyz.json` 503 problem+json, an API URL 500 problem+json.
-- `receipts/production-lifecycle.txt`: production mode on a fresh volume: `manage.py samepage_admin`, then `tools/lifecycle_check.py` runs one event from creation to published results, request by request.
-- `receipts/inputs.txt`: sha256 of `run.py` and `fixtures.json` (`python tools/task.py inputs`), identical to the organizers' files.
+- `acceptance-report.txt`: `python tools/verify.py stack` against a cold `docker compose up` on amd64 (arm64 gives the same bytes). It runs `run.py .dogfood.toml`, then the tests and the oracle below, then `run.py` again, and fails unless both reports are `claimed T1 T2, verified T1 T2` and identical.
+- `receipts/tests.txt`: `docker compose --profile test run --rm test` (pytest inside the image, against the compose Postgres), from the same `verify.py stack` step.
+- `receipts/oracle-statsmodels.txt`: `docker compose --profile oracle run --rm oracle` against that stack, from the same step.
+- `receipts/backup-restore.txt`: `python tools/verify.py backup` on that stack: the documented backup command, then a change (the Dry Harbour duplicate is merged), then the documented restore command. It fails unless `scores.csv`, the audit log length, the audit chain and the duplicate decision are back to what they were at the backup, and `run.py` still passes.
+- `receipts/production-refusal-demo-db.txt`, `receipts/production-mode.txt`, `receipts/production-lifecycle.txt`, `receipts/readiness-db-down.txt`: `python tools/verify.py production`, with random secrets. Production mode refuses a volume first seeded in demo mode and leaves `samepage_app` untouched; on a fresh volume it boots and refuses the demo sign-in and the demo organizer token; `manage.py samepage_admin`, then `tools/lifecycle_check.py` runs one event from creation to published results, request by request (one-time link secrets are cut to their first characters); with the database container stopped, `/healthz` is 200, `/readyz.json` 503 problem+json and an API URL 500 problem+json.
+- `receipts/inputs.txt`: sha256 of `run.py` and `fixtures.json` (`python tools/verify.py inputs`, also run by `fetch`), identical to the organizers' files.
 
 ## What that proves
 
