@@ -91,6 +91,11 @@ def test_imported_final_scores_refinalize_is_409_not_500(client, bearer):
         {"criteria": [5, 5, 5]},
         {"criteria": {"functionality": "x", "quality": 5, "innovation": 5}},
         {"criteria": {"functionality": 9, "quality": 5, "innovation": 5}},
+        # Booleans and fractions are refused, not coerced by int() to 1.
+        {"criteria": {"functionality": True, "quality": 1, "innovation": 1}},
+        {"criteria": {"functionality": 1.5, "quality": 1, "innovation": 1}},
+        {"criteria": {"functionality": "1.5", "quality": 1, "innovation": 1}},
+        {"criteria": {"functionality": 4.0, "quality": 4, "innovation": 4}},
         {"criteria": {"functionality": 3, "quality": 3, "innovation": 3}, "comment": ["not text"]},
     ],
 )
@@ -103,6 +108,20 @@ def test_bad_score_bodies_are_422(client, bearer, open_assignment, body):
     )
     assert response.status_code == 422
     assert not ScoreRev.objects.filter(judge_id="jdg_08", submission_id=open_assignment).exists()
+
+
+def test_a_fraction_is_not_read_as_an_unchanged_draft(client, bearer, open_assignment):
+    url = f"/e/evt_01/judge/assignments/{open_assignment}/scores.json"
+    first = client.post(
+        url, {"criteria": {"functionality": 1, "quality": 1, "innovation": 1}}, content_type="application/json", **bearer("jdg08")
+    )
+    assert first.status_code == 201
+    # int(1.5) == 1, so this used to answer 200 "unchanged".
+    response = client.post(
+        url, {"criteria": {"functionality": 1.5, "quality": 1, "innovation": 1}}, content_type="application/json", **bearer("jdg08")
+    )
+    assert response.status_code == 422
+    assert "functionality" in response.json()["detail"]
 
 
 @pytest.mark.parametrize(

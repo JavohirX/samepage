@@ -70,6 +70,19 @@ def _latest_map(judge_id: str, project_id: str) -> dict[str, ScoreRev]:
     return found
 
 
+def _whole_score(raw) -> int | None:
+    """A JSON integer or a form's digit string. true, 1.5 and "1.5" are refused, never rounded to 1."""
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, str):
+        text = raw.strip()
+        if text.isascii() and text.isdigit():
+            return int(text)
+    return None
+
+
 @transaction.atomic
 def save_scores(event_id: str, judge: Person, project_id: str, body: dict, *, final: bool) -> dict:
     row = _assigned(event_id, judge.id, project_id)
@@ -93,12 +106,8 @@ def save_scores(event_id: str, judge: Person, project_id: str, body: dict, *, fi
         if raw in (None, ""):
             errors[key] = "Score from 1 to 5."
             continue
-        try:
-            number = int(raw)
-        except (TypeError, ValueError):
-            errors[key] = "Score from 1 to 5."
-            continue
-        if number < 1 or number > 5:
+        number = _whole_score(raw)
+        if number is None or number < 1 or number > 5:
             errors[key] = "Score from 1 to 5."
             continue
         values[key] = number
