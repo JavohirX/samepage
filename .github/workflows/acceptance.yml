@@ -1,0 +1,294 @@
+# Proves the evaluation path: a cold 'docker compose up' on amd64 and arm64 passes the
+# official checker, the test suite passes inside the image, statsmodels re-derives the
+# ranking from the portal's scores.csv, a fresh volume gives the same tokens and the same
+# report, and production mode refuses the public demo credentials. Also runs the suite and
+# the checker natively, and a best-effort boot with the containers' internet cut off.
+name: acceptance
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERDICT: "claimed T1 T2, verified T1 T2"
+
+jobs:
+  native:
+    name: native tests + checker + oracle (Python 3.12, Postgres 16)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        env:
+          POSTGRES_USER: owner
+          POSTGRES_PASSWORD: ci-owner-7f3a9c
+          POSTGRES_DB: samepage
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -U owner -d samepage"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      OWNER_URL: postgres://owner:ci-owner-7f3a9c@127.0.0.1:5432/samepage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --only-binary=:all: -r requirements-dev.txt -r requirements-oracle.txt
+      - name: Import contract (domain and engine stay free of Django)
+        run: lint-imports
+      - name: Test suite against Postgres
+        run: DATABASE_URL="$OWNER_URL" python -m pytest -q -p no:cacheprovider -rs
+      - name: Boot with gunicorn in demo mode, run the checker
+        run: |
+          SAMEPAGE_MODE=demo DB_OWNER_URL="$OWNER_URL" DB_APP_PASSWORD=ci-app-2b81e0 BIND=127.0.0.1:8080 \
+            python -m samepage.ops.entrypoint > native-boot.log 2>&1 &
+          for i in $(seq 1 120); do curl -fsS http://127.0.0.1:8080/healthz >/dev/null 2>&1 && break; sleep 1; done
+          python run.py .dogfood.toml > acceptance-report-native.txt
+          cat acceptance-report-native.txt
+          grep -Fxq "$VERDICT" acceptance-report-native.txt
+      - name: statsmodels re-derives the ranking from scores.csv
+        run: python tools/oracle_statsmodels.py --toml .dogfood.toml | tee oracle-native.txt
+      - name: Production mode refuses the demo-seeded database
+        run: |
+          pkill -f 'gunicorn samepage.wsgi' || true
+          set +e
+          SAMEPAGE_MODE=production SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
+            ALLOWED_HOSTS=localhost DB_OWNER_URL="$OWNER_URL" DB_APP_PASSWORD=ci-app-2b81e0 BIND=127.0.0.1:8081 \
+            timeout 120 python -m samepage.ops.entrypoint > production-refusal-native.txt 2>&1
+          code=$?
+          set -e
+          cat production-refusal-native.txt
+          test "$code" -ne 0
+          grep -q "SAMEPAGE_E_PRODUCTION" production-refusal-native.txt
+          grep -q "demo bearer token" production-refusal-native.txt
+          grep -q "demo password" production-refusal-native.txt
+      - name: Show the boot log on failure
+        if: failure()
+        run: cat native-boot.log || true
+      - name: Upload receipts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-receipts
+          path: |
+            acceptance-report-native.txt
+            oracle-native.txt
+            production-refusal-native.txt
+            native-boot.log
+          if-no-files-found: warn
+
+  compose:
+    name: docker compose (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Versions
+        run: |
+          uname -m
+          docker version
+          docker compose version
+          python3 --version
+      - name: Build
+        run: docker compose --profile test --profile oracle build
+      - name: Cold start
+        run: docker compose up -d --wait --wait-timeout 300
+      - name: The boot banner prints the headers in .dogfood.toml
+        run: |
+          docker compose logs --no-color app > boot.log
+          test "$(grep -c 'Authorization: Bearer' .dogfood.toml)" -eq 4
+          grep -o 'Bearer [A-Za-z0-9_]*' .dogfood.toml | while read -r _ token; do
+            grep -qF "$token" boot.log || { echo "boot banner lacks $token"; exit 1; }
+          done
+      - name: Official checker against the cold stack
+        run: |
+          python3 run.py .dogfood.toml > acceptance-report.txt
+          cat acceptance-report.txt
+          grep -Fxq "$VERDICT" acceptance-report.txt
+          file acceptance-report.txt
+      - name: Test suite inside the container
+        run: docker compose --profile test run --rm test
+      - name: statsmodels re-derives the ranking (oracle image)
+        run: |
+          docker compose --profile oracle run --rm oracle > oracle-statsmodels.txt
+          cat oracle-statsmodels.txt
+          grep -q '^PASS' oracle-statsmodels.txt
+      - name: The checker still passes after the suite and the oracle
+        run: |
+          python3 run.py .dogfood.toml > acceptance-report-after-tests.txt
+          diff acceptance-report.txt acceptance-report-after-tests.txt
+      - name: Production mode refuses to start with the demo defaults
+        run: |
+          set +e
+          docker compose run --rm --no-deps -e SAMEPAGE_MODE=production app > production-refusal.txt 2>&1
+          code=$?
+          set -e
+          cat production-refusal.txt
+          test "$code" -ne 0
+          grep -q "SAMEPAGE_E_PRODUCTION" production-refusal.txt
+      - name: A fresh volume gives the same tokens and the same report
+        run: |
+          docker compose down -v
+          docker compose up -d --wait --wait-timeout 300
+          python3 run.py .dogfood.toml > acceptance-report-fresh-volume.txt
+          diff acceptance-report.txt acceptance-report-fresh-volume.txt
+      - name: Collect logs
+        if: always()
+        run: docker compose logs --no-color --timestamps > compose.log 2>&1 || true
+      - name: Dump state on failure
+        if: failure()
+        run: |
+          docker compose ps -a || true
+          tail -n 300 compose.log || true
+      - name: Upload report and logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-${{ matrix.arch }}
+          path: |
+            acceptance-report*.txt
+            oracle-statsmodels.txt
+            production-refusal.txt
+            boot.log
+            compose.log
+          if-no-files-found: warn
+      - name: Tear down
+        if: always()
+        run: docker compose down -v || true
+
+  production:
+    name: production mode (amd64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Real secrets for this run
+        run: |
+          {
+            echo "SECRET_KEY=$(openssl rand -hex 32)"
+            echo "DB_OWNER_PASSWORD=$(openssl rand -hex 16)"
+            echo "DB_APP_PASSWORD=$(openssl rand -hex 16)"
+          } >> "$GITHUB_ENV"
+      - name: Build
+        run: docker compose build
+      - name: A database seeded in demo mode is refused by production mode
+        run: |
+          SAMEPAGE_MODE=demo docker compose up -d --wait --wait-timeout 300
+          docker compose stop app
+          set +e
+          docker compose run --rm --no-deps -e SAMEPAGE_MODE=production -e ALLOWED_HOSTS=localhost app \
+            > production-refusal-demo-db.txt 2>&1
+          code=$?
+          set -e
+          cat production-refusal-demo-db.txt
+          test "$code" -ne 0
+          grep -q "demo bearer token" production-refusal-demo-db.txt
+          grep -q "demo password" production-refusal-demo-db.txt
+      - name: Production boots on a fresh database and refuses every demo credential
+        env:
+          SAMEPAGE_MODE: production
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          docker compose down -v
+          docker compose up -d --wait --wait-timeout 300
+          base=http://localhost:8080
+          org="$(grep '^organizer' .dogfood.toml | cut -d'"' -f2)"
+          {
+            echo "production mode on a fresh volume"
+            docker compose logs --no-color app | grep -m1 "preflight passed"
+            printf 'GET /healthz -> %s\n' "$(curl -s -o /dev/null -w '%{http_code}' $base/healthz)"
+            printf 'GET / -> %s\n' "$(curl -s -o /dev/null -w '%{http_code}' $base/)"
+            printf 'GET /demo/enter/org -> %s\n' "$(curl -s -o /dev/null -w '%{http_code}' $base/demo/enter/org)"
+            printf 'GET /e/evt_01/scores.csv with the demo organizer token -> %s\n' \
+              "$(curl -s -o /dev/null -w '%{http_code}' -H "$org" $base/e/evt_01/scores.csv)"
+          } | tee production-mode.txt
+          grep -q "GET /healthz -> 200" production-mode.txt
+          grep -q "GET / -> 200" production-mode.txt
+          grep -q "GET /demo/enter/org -> 404" production-mode.txt
+          grep -q "demo organizer token -> 401" production-mode.txt
+      - name: Collect logs
+        if: always()
+        run: docker compose logs --no-color --timestamps > compose-production.log 2>&1 || true
+      - name: Upload receipts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: production-mode
+          path: |
+            production-refusal-demo-db.txt
+            production-mode.txt
+            compose-production.log
+          if-no-files-found: warn
+      - name: Tear down
+        if: always()
+        run: docker compose down -v || true
+
+  offline:
+    name: boot with container egress blocked (best effort)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and pull while online
+        run: |
+          docker compose build
+          docker compose pull db
+      - name: Drop traffic from container bridges to anything but another bridge
+        # Host-to-container traffic (the published port) never crosses FORWARD, so it keeps working.
+        run: |
+          sudo iptables -I DOCKER-USER -i br-+ ! -o br-+ -j DROP
+          sudo iptables -S DOCKER-USER
+      - name: Cold boot offline and run the checker
+        run: |
+          docker compose up -d --wait --wait-timeout 300
+          if docker compose exec -T app python -c "import socket; socket.create_connection(('1.1.1.1', 443), timeout=5)"; then
+            echo "egress is still open"; exit 1
+          fi
+          python3 run.py .dogfood.toml > acceptance-report-offline.txt
+          cat acceptance-report-offline.txt
+          grep -Fxq "$VERDICT" acceptance-report-offline.txt
+      - name: Collect logs
+        if: always()
+        run: docker compose logs --no-color --timestamps > compose-offline.log 2>&1 || true
+      - name: Upload report and logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-offline
+          path: |
+            acceptance-report-offline.txt
+            compose-offline.log
+          if-no-files-found: warn
+      - name: Tear down
+        if: always()
+        run: docker compose down -v || true

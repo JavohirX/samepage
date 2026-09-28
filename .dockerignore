@@ -1,0 +1,21 @@
+# Build context: the app, fixtures.json and the tests. Never local state, secrets or notes.
+.git
+.github
+.venv
+venv
+plan
+backups
+media
+staticfiles
+receipts
+.env
+.env.*
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/*.log
+**/*.dump
+**/*.sqlite3
+acceptance-report*.txt
+*.md
+!README.md

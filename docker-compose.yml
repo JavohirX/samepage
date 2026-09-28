@@ -1,3 +1,14 @@
+# docker compose up  ->  a seeded demo portal at http://localhost:8080
+#
+# Two services: app (Django + gunicorn) and db (Postgres 16). Only the web port is
+# published, and only on the loopback interface by default, because demo mode accepts the
+# deterministic tokens in .dogfood.toml. The database is not published.
+#
+# PORT changes the host port (then edit base_url in .dogfood.toml to match).
+# SAMEPAGE_BIND_ADDR=0.0.0.0 publishes on every interface; add the host name to ALLOWED_HOSTS.
+# Production mode: see OPERATIONS.md. It refuses to start with any of the defaults below.
+name: samepage
+
 services:
   app:
     build:
@@ -5,31 +16,43 @@ services:
       target: runtime
     image: samepage:local
     init: true
+    restart: unless-stopped
     user: "10001:10001"
     environment:
-      SAMEPAGE_MODE: demo
+      SAMEPAGE_MODE: ${SAMEPAGE_MODE:-demo}
       OPENBLAS_NUM_THREADS: "1"
       PORT: ${PORT:-8080}
       DB_OWNER_URL: postgres://owner:${DB_OWNER_PASSWORD:-demo-owner}@db:5432/samepage
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:-demo-app}
-      ALLOWED_HOSTS: localhost,127.0.0.1,app
-      SECRET_KEY: ${SECRET_KEY:-demo-secret-key-not-for-production-use-32b}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,app}
+      SECRET_KEY: ${SECRET_KEY:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
       MEDIA_ROOT: /data/media
     ports:
-      - "${PORT:-8080}:8000"
+      - "${SAMEPAGE_BIND_ADDR:-127.0.0.1}:${PORT:-8080}:8000"
     volumes:
       - media:/data/media
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)"]
-      interval: 2s
-      timeout: 2s
-      retries: 30
-      start_period: 60s
+      test: ["CMD", "python", "-m", "samepage.ops.healthcheck"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 90s
+
   db:
-    image: postgres:16-alpine
+    # Multi-arch index, pinned by tag and digest.
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    restart: unless-stopped
     environment:
       POSTGRES_USER: owner
       POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD:-demo-owner}
@@ -37,13 +60,16 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
+      # -h 127.0.0.1: initdb's temporary server listens on the socket only, so it never looks ready.
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U owner -d samepage"]
       interval: 2s
-      timeout: 2s
+      timeout: 3s
       retries: 30
+
+  # docker compose --profile ops run --rm backup   /   ... run --rm restore
   backup:
     profiles: ["ops"]
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     environment:
       PGPASSWORD: ${DB_OWNER_PASSWORD:-demo-owner}
     depends_on:
@@ -55,7 +81,7 @@ services:
     entrypoint: ["sh", "-c", "mkdir -p /backups/latest && pg_dump -h db -U owner -d samepage -Fc -f /backups/latest/db.dump && tar -C /data -cf /backups/latest/media.tar media"]
   restore:
     profiles: ["ops"]
-    image: postgres:16-alpine
+    image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     environment:
       PGPASSWORD: ${DB_OWNER_PASSWORD:-demo-owner}
     depends_on:
@@ -65,6 +91,8 @@ services:
       - ./backups:/backups
       - media:/data/media
     entrypoint: ["sh", "-c", "pg_restore -h db -U owner -d samepage --clean --if-exists /backups/latest/db.dump && tar -C /data -xf /backups/latest/media.tar"]
+
+  # docker compose --profile test run --rm test   (pytest in the image, against this Postgres)
   test:
     profiles: ["test"]
     build:
@@ -72,10 +100,11 @@ services:
       target: test
     environment:
       DATABASE_URL: postgres://owner:${DB_OWNER_PASSWORD:-demo-owner}@db:5432/samepage
-      SAMEPAGE_FAST_HASH: "1"
     depends_on:
       db:
         condition: service_healthy
+
+  # docker compose --profile oracle run --rm oracle   (statsmodels re-derives the ranking)
   oracle:
     profiles: ["oracle"]
     build:
@@ -86,6 +115,7 @@ services:
     depends_on:
       app:
         condition: service_healthy
+
 volumes:
   pgdata: {}
   media: {}

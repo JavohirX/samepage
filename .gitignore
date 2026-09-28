@@ -8,6 +8,10 @@ media/
 *.sqlite3
 .idea/
 .vscode/
+backups/
+*.dump
+.env
+.env.*
 
 # Planning notes (kept local)
 plan/
