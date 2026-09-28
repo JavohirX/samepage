@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import time
+from fractions import Fraction
 
 from django.conf import settings
 from django.db import transaction
@@ -19,7 +20,7 @@ from rest_framework.exceptions import NotFound
 from samepage.apps.portal.models import AuditEvent, Event, Person, ResultsSnapshot, RoleGrant
 from samepage.core.errors import Conflict
 from samepage.domain.canonical import canonical
-from samepage.engine.snapshot import build_snapshot
+from samepage.engine.snapshot import NotIdentifiable, build_snapshot
 from samepage.services import audit
 from samepage.services.guards import FROZEN
 from samepage.services.ledger import counted_for_engine, weights_for
@@ -83,7 +84,7 @@ def rebuild(event_id: str, *, actor: str = "engine", cause: int | None = None) -
     method = "reml"
     payload: dict
     if budget <= 0:
-        payload = _fallback(reviews, meta, "budget is 0")
+        payload = _fallback(reviews, meta, weights, "the model fit is switched off (ENGINE_BOOT_BUDGET_S is 0)")
         method = "raw_fallback"
     else:
         try:
@@ -91,13 +92,13 @@ def rebuild(event_id: str, *, actor: str = "engine", cause: int | None = None) -
                 reviews, meta, weights, with_lojo=True, with_draws=True, judges_present=present
             )
             if time.perf_counter() - started > budget:
-                payload = _fallback(reviews, meta, "over budget")
+                payload = _fallback(reviews, meta, weights, "the model fit took longer than its time budget")
                 method = "raw_fallback"
             else:
                 payload = snapshot
                 method = snapshot.get("method") or "reml"
         except Exception as exc:
-            payload = _fallback(reviews, meta, exc.__class__.__name__)
+            payload = _fallback(reviews, meta, weights, _reason(exc))
             method = "raw_fallback"
     seconds = round(time.perf_counter() - started, 3)
     payload = _jsonable(payload)
@@ -145,27 +146,46 @@ def current(event_id: str) -> ResultsSnapshot | None:
     return fresh(event_id)
 
 
-def _fallback(reviews, meta, reason: str) -> dict:
+def _reason(exc: Exception) -> str:
+    """Why the model was not fitted, in words a results page can print."""
+    if isinstance(exc, NotIdentifiable):
+        return f"the judge-bias model cannot be fitted: {exc}"
+    if str(exc).startswith("REML grid has no finite likelihood"):
+        return "the judge-bias model cannot be fitted: its likelihood is undefined on these reviews"
+    return f"the judge-bias model failed ({exc.__class__.__name__})"
+
+
+def _fallback(reviews, meta, weights: dict, reason: str) -> dict:
+    """Mean of each project's counted weighted totals, with no judge adjustment.
+
+    The same weighted total as the ledger (scores.csv `weighted_total`): each review uses the
+    weights of its project's track, else the event's.
+    """
     from collections import defaultdict
+
+    from samepage.domain.canonical import ranking_sha256
+    from samepage.domain.weighted import fraction_text, weighted_total
 
     totals = defaultdict(list)
     for review in reviews:
-        values = list(review["criteria"].values())
-        if not values:
+        if not review["criteria"]:
             continue
-        totals[review["project_id"]].append(sum(values) / len(values))
+        totals[review["project_id"]].append(weighted_total(review["criteria"], review.get("weights") or weights))
     rows = []
     for project, values in totals.items():
         info = meta.get(project, {})
+        exact = sum(values, start=Fraction(0)) / len(values)
+        mean = float(exact)
         rows.append(
             {
                 "id": project,
                 "title": info.get("title", ""),
                 "track": info.get("track", ""),
                 "submitted_at": info.get("submitted_at", ""),
-                "raw_mean": sum(values) / len(values),
+                "raw_mean": mean,
+                "raw_mean_exact": fraction_text(exact),
                 "n_reviews": len(values),
-                "adjusted": sum(values) / len(values),
+                "adjusted": mean,
                 "raptors_k10": None,
                 "p_top5": None,
                 "rank_lo": None,
@@ -173,10 +193,17 @@ def _fallback(reviews, meta, reason: str) -> dict:
                 "z_mean": None,
                 "z_rank": None,
                 "flags": "",
+                "_exact": exact,
             }
         )
-    rows.sort(key=lambda row: (-row["raw_mean"], row["submitted_at"], row["id"]))
+    # Exact fractions order the table, so two means that differ only past float precision do not swap.
+    rows.sort(key=lambda row: (-row["_exact"], -row["n_reviews"], row["submitted_at"], row["id"]))
+    group = 0
+    previous = None
     for index, row in enumerate(rows, start=1):
+        if previous is None or row["_exact"] != previous:
+            group += 1
+            previous = row["_exact"]
         row["rank"] = index
         row["raw_rank"] = index
         row["k10_rank"] = None
@@ -184,17 +211,17 @@ def _fallback(reviews, meta, reason: str) -> dict:
         row["raw_display"] = f"{row['raw_mean']:.3f}"
         row["k10_display"] = ""
         row["p_top5_display"] = ""
-        row["tie_group"] = index
+        row["tie_group"] = group
         row["track_rank"] = ""
         row["rank_move_raw"] = 0
-    from samepage.domain.canonical import ranking_sha256
-
+    for row in rows:
+        del row["_exact"]
     return {
         "method": "raw_fallback",
         "reason": reason,
         "rows": rows,
         "ranking_sha256": ranking_sha256([(row["id"], row["rank"]) for row in rows]),
-        "banner": {"m": None, "text": "normalization unavailable: raw means, ranks provisional"},
+        "banner": {"m": None, "text": f"No judge adjustment: {reason}. Ranked by the mean weighted total; ranks provisional."},
         "top5": [row["id"] for row in rows[:5]],
         "ablation": {},
         "z_failures": [],
@@ -238,20 +265,31 @@ def results_payload(event_id: str) -> dict:
                 "flags": "short" if row["id"] in short else "",
             }
         )
-    story = (
-        "Each project's score is the average of its judges' weighted rubric scores "
-        "after removing each judge's measured lean, with judges who scored few projects trusted less; "
-        "the Raptors k=10 and raw columns are shown beside it."
-    )
+    method = snapshot.method if snapshot else "missing"
+    reason = payload.get("reason") or ""
+    if method == "raw_fallback":
+        # The fallback removes no lean, so the page must not say it does.
+        story = (
+            "Each project's score is the plain mean of its judges' weighted rubric totals "
+            "(the weighted_total column of scores.csv), with no judge adjustment"
+            + (f": {reason}." if reason else ".")
+        )
+    else:
+        story = (
+            "Each project's score is the average of its judges' weighted rubric scores "
+            "after removing each judge's measured lean, with judges who scored few projects trusted less; "
+            "the Raptors k=10 and raw columns are shown beside it."
+        )
     return {
         "title": "Results",
         "event": event_id,
         "resource": "results",
-        "method": snapshot.method if snapshot else "missing",
+        "method": method,
         "lambda": payload.get("lambda"),
         "ranking_sha256": payload.get("ranking_sha256", ""),
         "banner": (payload.get("banner") or {}).get("text", ""),
         "story": story,
+        "fallback_reason": reason if method == "raw_fallback" else "",
         "degraded": snapshot.method == "raw_fallback" if snapshot else True,
         "columns": [
             "id",

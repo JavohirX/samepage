@@ -19,6 +19,10 @@ N_DRAWS = 4000
 SENSITIVITY = (5.0, 10.0, 20.0, 30.0, 50.0)
 
 
+class NotIdentifiable(ValueError):
+    """The judge-bias model has nothing to fit: within every project, all counted reviews agree."""
+
+
 def kendall_tau_b(left: dict[str, int], right: dict[str, int]) -> float | None:
     keys = [key for key in left if key in right]
     n = len(keys)
@@ -96,6 +100,17 @@ def build_snapshot(
     """reviews are the counted rows only. projects_meta covers the projects being ranked."""
     if not reviews:
         return {"method": "raw_fallback", "reason": "no counted reviews", "rows": [], "ranking_sha256": ""}
+    # Checked on exact fractions. With no difference between any project's reviews, the residual after
+    # the project means is zero and the REML likelihood is undefined; in floating point it is rounding
+    # noise instead, which would pick a λ from noise. The caller falls back to raw weighted means.
+    exact_totals: dict[str, set] = defaultdict(set)
+    for review in reviews:
+        exact_totals[review["project_id"]].add(_total(review, weights))
+    if all(len(values) == 1 for values in exact_totals.values()):
+        raise NotIdentifiable(
+            "within each project every counted review gives the same weighted total, "
+            "so no variation is left to measure a judge's lean from"
+        )
 
     project_ids, judge_ids, y, projects, judges, x, z = _fit_arrays(reviews, weights)
     chosen = choose_lambda(x, z, y)
