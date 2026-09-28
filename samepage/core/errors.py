@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 
+from django.db import DatabaseError, IntegrityError
 from django.http import HttpResponse
 from django.shortcuts import render
 from rest_framework.exceptions import (
@@ -14,20 +16,27 @@ from rest_framework.exceptions import (
     NotFound,
     ParseError,
     PermissionDenied,
+    Throttled,
     ValidationError,
 )
-from rest_framework.views import exception_handler as drf_default
+from rest_framework.views import set_rollback
 
 from samepage.core.headers import annotate
 from samepage.core.renderers import negotiate
+from samepage.domain.transitions import TransitionError
+
+logger = logging.getLogger("samepage.errors")
 
 TITLES = {
     400: "Bad Request",
     401: "Unauthorized",
     403: "Forbidden",
     404: "Not Found",
+    405: "Method Not Allowed",
     409: "Conflict",
+    415: "Unsupported Media Type",
     422: "Unprocessable Content",
+    429: "Too Many Requests",
     500: "Internal Server Error",
 }
 
@@ -84,6 +93,7 @@ def problem_response(request, status: int, detail: str, *, fmt: str | None = Non
             {"error": detail, "page_title": "Sign in", "status": 401},
             status=401,
         )
+        response["WWW-Authenticate"] = 'Bearer realm="samepage"'
         return annotate(response, request, fmt=fmt, public_cache=False)
     body = {
         "type": "about:blank",
@@ -100,22 +110,58 @@ def problem_response(request, status: int, detail: str, *, fmt: str | None = Non
             status=status,
             content_type="application/problem+json; charset=utf-8",
         )
+    if status == 401:
+        response["WWW-Authenticate"] = 'Bearer realm="samepage"'
     return annotate(response, request, fmt=fmt, public_cache=public_cache)
+
+
+def _database_refusal(exc: DatabaseError) -> str | None:
+    """A trigger refusal or a constraint violation is the client's conflict, not a server fault."""
+    if isinstance(exc, IntegrityError):
+        return "That conflicts with data that already exists."
+    try:
+        from psycopg import errors as pg_errors
+    except ImportError:  # pragma: no cover - psycopg is a runtime dependency
+        return None
+    cause = exc.__cause__
+    if isinstance(cause, pg_errors.RaiseException):
+        # RAISE EXCEPTION text comes from our own triggers (migrations/0002_triggers.py).
+        return cause.diag.message_primary or "Refused by a database rule."
+    return None
 
 
 def exception_handler(exc, context):
     request = context["request"]
     fmt = context.get("kwargs", {}).get("fmt")
+    # Nothing a refused request wrote may be committed by ATOMIC_REQUESTS.
+    set_rollback()
+    if isinstance(exc, TransitionError):
+        exc = Conflict(str(exc))
+    elif isinstance(exc, DatabaseError):
+        refusal = _database_refusal(exc)
+        if refusal:
+            exc = Conflict(refusal)
     if isinstance(exc, ValidationError) and not isinstance(exc, Unprocessable):
         # Field errors are 422. Parse errors stay 400 via ParseError.
         exc = Unprocessable(exc.detail)
     status = _status_of(exc)
-    if status == 500 and not isinstance(exc, APIException):
+    if status >= 500 and not isinstance(exc, APIException):
         detail = "Something went wrong."
+        logger.error(
+            "unhandled %s correlation_id=%s method=%s path=%s",
+            type(exc).__name__,
+            getattr(request, "correlation_id", ""),
+            request.method,
+            request.path,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
     else:
         detail = _detail_of(exc)
     # Returning HttpResponse skips DRF's renderer, which would turn a CSV 403 into a 500.
-    return problem_response(request, status, detail, fmt=fmt)
+    response = problem_response(request, status, detail, fmt=fmt)
+    if isinstance(exc, Throttled) and exc.wait:
+        response["Retry-After"] = str(int(exc.wait) + 1)
+    return response
 
 
 def csrf_failure(request, reason=""):
@@ -127,4 +173,11 @@ def handle_404(request, exception):
 
 
 def handle_500(request):
+    # django.request logs the traceback just before this runs. This line ties it to the page's reference.
+    logger.error(
+        "server error correlation_id=%s method=%s path=%s",
+        getattr(request, "correlation_id", ""),
+        request.method,
+        request.path,
+    )
     return problem_response(request, 500, "Something went wrong.")

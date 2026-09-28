@@ -40,12 +40,13 @@
   </header>
   {% if demo_mode %}
   <aside class="demo">
-    <span>Demo</span>
-    <a href="/demo/enter/org">Organizer</a>
-    <a href="/demo/enter/jdg08">Judge A</a>
-    <a href="/demo/enter/jdg03">Judge B</a>
-    <a href="/demo/enter/priya1">Participant</a>
-    <a href="/demo/enter/admin">Admin</a>
+    <span>Demo sign-in</span>
+    <form method="post" action="/demo/enter/org">{% csrf_token %}<button type="submit" class="outline">Organizer</button></form>
+    <form method="post" action="/demo/enter/jdg08">{% csrf_token %}<button type="submit" class="outline">Judge A</button></form>
+    <form method="post" action="/demo/enter/jdg03">{% csrf_token %}<button type="submit" class="outline">Judge B</button></form>
+    <form method="post" action="/demo/enter/priya1">{% csrf_token %}<button type="submit" class="outline">Participant</button></form>
+    <form method="post" action="/demo/enter/control">{% csrf_token %}<button type="submit" class="outline">Participant (open event)</button></form>
+    <form method="post" action="/demo/enter/admin">{% csrf_token %}<button type="submit" class="outline">Admin</button></form>
     {% if me %}<em>signed in as {{ me.email }}</em>{% endif %}
   </aside>
   {% endif %}

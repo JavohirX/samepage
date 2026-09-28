@@ -51,32 +51,76 @@ def _closed(event) -> None:
         raise Conflict(closed_message(event.submissions_close))
 
 
+_TEXT_LIMITS = {
+    "title": 200,
+    "tagline": 300,
+    "description": 20000,
+    "video_url": 2000,
+    "repo_url": 2000,
+    "live_url": 2000,
+}
+
+
+def _text(body: dict, errors: dict, field: str, *aliases: str) -> str:
+    """A text field, or an error. A number or a list is refused, never coerced into a 500."""
+    value = None
+    for key in (field, *aliases):
+        if body.get(key) not in (None, ""):
+            value = body.get(key)
+            break
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        errors[field] = "Expected text."
+        return ""
+    value = value.strip()
+    if len(value) > _TEXT_LIMITS[field]:
+        errors[field] = f"At most {_TEXT_LIMITS[field]} characters."
+    return value
+
+
 def _clean(body: dict, *, partial: bool) -> dict:
     errors = {}
-    title = (body.get("title") or body.get("name") or "").strip()
-    tagline = (body.get("summary") or body.get("tagline") or "").strip()
-    if not partial and not title:
+    title = _text(body, errors, "title", "name")
+    tagline = _text(body, errors, "tagline", "summary")
+    description = _text(body, errors, "description")
+    video_url = _text(body, errors, "video_url")
+    repo_url = _text(body, errors, "repo_url")
+    live_url = _text(body, errors, "live_url")
+    if not partial and not title and "title" not in errors:
         errors["title"] = "Title is required."
     tags = body.get("tech_tags") or []
     if isinstance(tags, str):
         tags = [part for part in tags.replace(",", " ").split() if part]
-    bad = [tag for tag in tags if not _TAG.match(str(tag))]
-    if bad:
+    if not isinstance(tags, list) or not all(isinstance(tag, str) and _TAG.match(tag) for tag in tags):
         errors["tech_tags"] = "Tags are lowercase letters, digits and + # . -"
+        tags = []
+    if "custom_answers" in body and not isinstance(body["custom_answers"], dict):
+        errors["custom_answers"] = "Expected an object."
     if errors:
         raise Unprocessable(errors)
     cleaned = {
         "title": title,
         "tagline": tagline,
-        "description": (body.get("description") or "").strip(),
-        "video_url": (body.get("video_url") or "").strip(),
-        "repo_url": (body.get("repo_url") or "").strip(),
-        "live_url": (body.get("live_url") or "").strip(),
+        "description": description,
+        "video_url": video_url,
+        "repo_url": repo_url,
+        "live_url": live_url,
         "tech_tags": [str(tag) for tag in tags],
     }
     if "custom_answers" in body and isinstance(body["custom_answers"], dict):
         cleaned["custom_answers"] = {str(k): str(v) for k, v in body["custom_answers"].items()}
     return cleaned
+
+
+def _track(event, body: dict) -> str | None:
+    """The track must belong to this event. A track id from another event is refused."""
+    track_id = body.get("track") or body.get("track_id")
+    if track_id in (None, ""):
+        return event.tracks.order_by("id").values_list("id", flat=True).first()
+    if not isinstance(track_id, str) or not event.tracks.filter(id=track_id).exists():
+        raise Unprocessable({"track": "Choose a track of this event."})
+    return track_id
 
 
 @transaction.atomic
@@ -88,8 +132,7 @@ def create(event_id: str, person, body: dict) -> Submission:
     if membership is None:
         raise PermissionDenied("You are not on a team for this event.")
     TeamMember.objects.select_for_update().get(pk=membership.pk)
-    _closed(event)
-    track_id = body.get("track") or event.tracks.order_by("id").values_list("id", flat=True).first()
+    track_id = _track(event, body)
     submission = Submission(
         id="prj_" + secrets.token_hex(4),
         event=event,

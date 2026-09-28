@@ -11,8 +11,11 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework.exceptions import NotFound
 
 from samepage.apps.portal.models import AssignmentRun, Batch, Event, Person
+from samepage.core.csrf import enforce_csrf
 from samepage.core.errors import Unprocessable
 from samepage.core.headers import annotate
+from samepage.core.policy import hidden_fields
+from samepage.core.throttles import LoginThrottle
 from samepage.core.renderers import negotiate, render_payload
 from samepage.core.views import SamepageView
 from samepage.domain.tokens import DEMO_PASSWORD, PRINCIPALS
@@ -35,6 +38,16 @@ def _wants_html(request, fmt) -> bool:
     if request.POST:
         return True
     return False
+
+
+def _body(request) -> dict:
+    """The request body as one flat object. A form post keeps the last value of each field."""
+    data = request.data
+    if hasattr(data, "dict"):
+        return data.dict()
+    if isinstance(data, dict):
+        return data
+    raise Unprocessable("Expected an object.")
 
 
 def _json(request, payload, status, location, fmt):
@@ -77,6 +90,9 @@ class HomeView(SamepageView):
 
 
 class LoginView(SamepageView):
+    throttle_classes = [LoginThrottle]
+    throttle_scope = "login"
+
     def get(self, request, fmt=None):
         if request.principal is not None:
             return Redirect303("/")
@@ -84,9 +100,15 @@ class LoginView(SamepageView):
         return annotate(response, request, fmt=fmt, public_cache=False)
 
     def post(self, request, fmt=None):
-        email = (request.data.get("email") or "").strip()
-        password = request.data.get("password") or ""
-        user = authenticate(request, email=email, password=password)
+        # Signing in writes a session cookie, so a cross-site form must not be able to do it.
+        enforce_csrf(request)
+        body = _body(request)
+        email = str(body.get("email") or "").strip()
+        password = str(body.get("password") or "")
+        user = None
+        # The demo password is published in this repository. Outside demo mode it never signs anyone in.
+        if settings.DEMO_MODE or password != DEMO_PASSWORD:
+            user = authenticate(request, email=email, password=password)
         if user is None:
             response = render(
                 request,
@@ -96,7 +118,7 @@ class LoginView(SamepageView):
             )
             return annotate(response, request, fmt=fmt, public_cache=False)
         login(request, user)
-        nxt = request.data.get("next") or "/"
+        nxt = str(body.get("next") or "/")
         if not url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
             nxt = "/"
         return Redirect303(nxt)
@@ -108,8 +130,23 @@ class LogoutView(SamepageView):
         return Redirect303("/")
 
 
+DEMO_LANDING = {
+    "org": "/e/evt_01/progress",
+    "admin": "/e/evt_01/progress",
+    "jdg08": "/e/evt_01/judge/batches",
+    "jdg03": "/e/evt_01/judge/batches",
+    "priya1": "/e/evt_01/projects",
+    "control": "/e/evt_02/projects",
+}
+
+
 class DemoEnterView(SamepageView):
-    def get(self, request, slug, fmt=None):
+    """Demo mode only. GET shows a button; the POST (with a CSRF token) signs the browser in.
+
+    A GET never changes who is signed in, so an image tag on another site cannot do it.
+    """
+
+    def _principal(self, slug):
         if not settings.DEMO_MODE:
             raise NotFound("Not found.")
         spec = PRINCIPALS.get(slug)
@@ -118,16 +155,22 @@ class DemoEnterView(SamepageView):
         user = Person.objects.filter(id=spec["id"]).first()
         if user is None:
             raise NotFound("Not found.")
+        return spec, user
+
+    def get(self, request, slug, fmt=None):
+        spec, _user = self._principal(slug)
+        response = render(
+            request,
+            "demo_enter.html",
+            {"page_title": "Demo sign-in", "slug": slug, "spec": spec, "landing": DEMO_LANDING.get(slug, "/")},
+        )
+        return annotate(response, request, fmt=fmt, public_cache=False)
+
+    def post(self, request, slug, fmt=None):
+        _spec, user = self._principal(slug)
+        enforce_csrf(request)
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-        landing = {
-            "org": "/e/evt_01/progress",
-            "admin": "/e/evt_01/progress",
-            "jdg08": "/e/evt_01/judge/batches",
-            "jdg03": "/e/evt_01/judge/batches",
-            "priya1": "/e/evt_01/projects",
-            "control": "/e/evt_02/projects",
-        }
-        return Redirect303(landing.get(slug, "/"))
+        return Redirect303(DEMO_LANDING.get(slug, "/"))
 
 
 class AccessView(SamepageView):
@@ -180,6 +223,9 @@ class ProjectsView(SamepageView):
     formats = ("html", "json", "csv")
 
     def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if event is None:
+            raise NotFound("Unknown event.")
         roles = access.roles_of(request.principal, evt)
         staff = bool(roles & {"organizer", "admin"})
         query = request.GET.copy()
@@ -187,9 +233,23 @@ class ProjectsView(SamepageView):
             query.pop("state", None)
             query.pop("review", None)
         include = staff and query.get("state") in {"all", "withdrawn"}
-        payload = ledger.project_rows(evt, include_withdrawn=include or query.get("state") == "withdrawn", query=query)
+        payload = ledger.project_rows(
+            evt,
+            include_withdrawn=include or query.get("state") == "withdrawn",
+            query=query,
+            paginate=negotiate(request, fmt) != "csv",
+        )
         if not staff:
             payload["items"] = [row for row in payload["items"] if row["state"] != "withdrawn"] if query.get("state") != "withdrawn" else payload["items"]
+        # Blind judging: the same fields leave HTML, JSON and CSV, decided by the policy table.
+        hidden = hidden_fields(roles, blind=event.blind_judging) & {"team_id", "team_name"}
+        if hidden:
+            payload["items"] = [{k: v for k, v in row.items() if k not in hidden} for row in payload["items"]]
+            payload["columns"] = [column for column in payload["columns"] if column not in hidden]
+            payload["html_omitted"] = {
+                **payload.get("html_omitted", {}),
+                **{field: "blind judging is on" for field in sorted(hidden)},
+            }
         return render_payload(
             request,
             payload,
@@ -201,7 +261,7 @@ class ProjectsView(SamepageView):
     def post(self, request, evt, fmt=None):
         # Re-check the write action. GET on this URL is public; POST is not.
         access.require(request.principal, "submission.create", event_id=evt)
-        body = request.data if hasattr(request, "data") else {}
+        body = request.data
         if not isinstance(body, dict):
             raise Unprocessable("Expected an object.")
         created = submissions.create(evt, request.principal, body)
@@ -318,7 +378,9 @@ class DuplicateConfirmView(SamepageView):
     formats = ("html", "json")
 
     def post(self, request, evt, dup, fmt=None):
-        resolution = request.data.get("resolution") or None
+        resolution = _body(request).get("resolution") or None
+        if resolution is not None and not isinstance(resolution, str):
+            raise Unprocessable({"resolution": "choose keep_latest or merge"})
         duplicates.confirm(evt, dup, request.principal.id, resolution=resolution)
         if _wants_html(request, fmt):
             return Redirect303(f"/e/{evt}/duplicates/{dup}")
@@ -380,12 +442,14 @@ class AssignmentListView(SamepageView):
 
     def post(self, request, evt, fmt=None):
         access.require(request.principal, "assignment.run", event_id=evt)
-        kind = (request.data.get("kind") or "dry_run").strip()
+        kind = str(_body(request).get("kind") or "dry_run").strip()
         if kind == "topup":
-            run = judging.topup(evt)
+            run = judging.topup(evt, actor=request.principal.id)
             payload = judging.run_payload(run)
+        elif kind == "dry_run":
+            payload = judging.dry_run(evt, actor=request.principal.id)
         else:
-            payload = judging.dry_run(evt)
+            raise Unprocessable({"kind": "choose dry_run or topup"})
         if _wants_html(request, fmt):
             return Redirect303(f"/e/{evt}/assignment-runs/{payload['id']}")
         return _json(request, {"id": payload["id"], "kind": kind}, 201, f"/e/{evt}/assignment-runs/{payload['id']}.json", fmt)
@@ -434,8 +498,9 @@ class ConsoleSaveView(SamepageView):
     formats = ("html", "json")
 
     def post(self, request, evt, prj, fmt=None):
-        final = str(request.data.get("final") or "") in {"1", "true", "on"}
-        result = judging.save_scores(evt, request.principal, prj, request.data, final=final)
+        body = _body(request)
+        final = str(body.get("final") or "").lower() in {"1", "true", "on"}
+        result = judging.save_scores(evt, request.principal, prj, body, final=final)
         if _wants_html(request, fmt):
             return Redirect303(f"/e/{evt}/judge/assignments/{prj}")
         status = 200 if not result.get("saved", True) else 201
@@ -447,7 +512,8 @@ class FinalizeView(SamepageView):
     formats = ("html", "json")
 
     def post(self, request, evt, prj, fmt=None):
-        body = dict(request.data)
+        # _body flattens a form post, so c_quality=4 arrives as "4", not ["4"].
+        body = dict(_body(request))
         body["final"] = True
         result = judging.save_scores(evt, request.principal, prj, body, final=True)
         if _wants_html(request, fmt):

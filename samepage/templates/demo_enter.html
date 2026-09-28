@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Demo sign-in</h1>
+<p>Sign in as <strong>{{ spec.name }}</strong> ({{ spec.role }}, {{ spec.email }}) and go to <code>{{ landing }}</code>.</p>
+<form method="post" action="/demo/enter/{{ slug }}">
+  {% csrf_token %}
+  <button type="submit">Sign in as {{ spec.name }}</button>
+</form>
+<p class="meta">This page exists only while SAMEPAGE_MODE=demo. In production mode it is a 404, and the demo tokens and password are refused.</p>
+{% endblock %}
