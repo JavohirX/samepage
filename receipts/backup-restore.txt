@@ -1,0 +1,9 @@
+backup and restore on the demo stack (docker compose --profile ops)
+before the backup: scores.csv sha256 9a8294806d6ca8c3, audit events 128, chain_ok true, dup_01 provisional keep_latest
+docker compose --profile ops run --rm backup -> exit 0
+POST /e/evt_01/duplicates/dup_01/confirm.json merge -> 200
+after the change: scores.csv sha256 02736efcfbc2d435, audit events 129, chain_ok true, dup_01 confirmed merge
+docker compose --profile ops run --rm restore -> exit 0
+after the restore: scores.csv sha256 9a8294806d6ca8c3, audit events 128, chain_ok true, dup_01 provisional keep_latest
+PASS: the restore brought back the backed-up scores, audit chain and duplicate decision
+run.py after the restore: claimed T1 T2, verified T1 T2
