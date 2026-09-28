@@ -38,7 +38,7 @@ USER root
 COPY requirements-dev.txt .
 RUN pip install --only-binary=:all: -r requirements-dev.txt
 USER 10001:10001
-CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+CMD ["python", "-m", "pytest", "-p", "no:cacheprovider", "-rs"]
 
 # The outside check, in its own image: docker compose --profile oracle run --rm oracle
 FROM python:3.12.14-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e AS oracle

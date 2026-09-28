@@ -52,7 +52,7 @@ jobs:
       - name: Import contract (domain and engine stay free of Django)
         run: lint-imports
       - name: Test suite against Postgres
-        run: DATABASE_URL="$OWNER_URL" python -m pytest -q -p no:cacheprovider -rs
+        run: DATABASE_URL="$OWNER_URL" python -m pytest -p no:cacheprovider -rs
       - name: Boot with gunicorn in demo mode, run the checker
         run: |
           SAMEPAGE_MODE=demo DB_OWNER_URL="$OWNER_URL" DB_APP_PASSWORD=ci-app-2b81e0 BIND=127.0.0.1:8080 \
