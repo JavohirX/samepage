@@ -52,6 +52,12 @@ On that set the engine reports:
 
 Switching the duplicate to merge retargets prj_07's five reviews onto prj_41, so three judges are in that project twice. The duplicates page prints the rank that fit produces. It is a preview, computed by the same function, not a stored slogan.
 
+## When the model cannot be fitted
+
+The fit needs reviews of the same project that disagree. If within every project all counted reviews give the same weighted total (one review per project, or a small event whose judges agree on everything), the residual after the project means is zero and the REML likelihood is undefined. The engine checks this on exact fractions before fitting, because in floating point the residual is rounding noise and a λ picked from it would mean nothing.
+
+The results then say `method raw_fallback`. Each project's score is the mean of its counted weighted totals: the `weighted_total` column of `scores.csv`, so the organizer's weights (and any track override) apply exactly as in the fit. No judge's lean is removed. The order is that exact mean, then more reviews, then earlier submission, then id. The results page and `results.json` say so in `story` and `fallback_reason`, and the k=10, P(top-5) and rank-interval columns are empty. The same fallback is used if the fit fails, or takes longer than `SAMEPAGE_ENGINE_BOOT_BUDGET_S`. A weight change refits on the next read under either method (`tests/test_results_fallback.py` runs a 2-project, 2-judge event with 9:1 weights through it).
+
 ## Other columns
 
 - **Raw mean.** The fraction mean of counted weighted totals.
@@ -88,7 +94,7 @@ Issuing batches, the dry run and top-up use the same matcher: repeated maximum b
 - **Assign one** (`POST /e/<event>/assignments.json {judge, project}`): the same rules, checked one by one: 409 for another track, a conflict of interest, a project that is not submitted, or a pair that exists.
 - **Dry run**: a fresh design that ignores existing reviews and issues nothing.
 
-Judges are invited by email on the settings page with the tracks they judge (none ticked means all). The judging context is track-scoped: a judge is assigned, opens in the console, and scores only projects in their tracks, and reads only their own scores. The public gallery stays public to everyone, judges included.
+Judges are invited by email on the settings page with the tracks they judge (none ticked means all). A new address gets an account and a one-time set-password link. An address that already has an account gets a one-time acceptance link instead, and becomes a judge only when that account, signed in, accepts it: anyone can sign up with any address, so an existing account is not proof of who holds it. Until then the people list shows the invitation as not accepted, and the matcher does not see them. 'Judging ends', if set, is enforced: after it, saving and finalizing a score answer 409 until an organizer moves it later. The judging context is track-scoped: a judge is assigned, opens in the console, and scores only projects in their tracks, and reads only their own scores. The public gallery stays public to everyone, judges included.
 
 The run report prints the load histogram, coverage, component count, articulation judges, the seed, the number of assigned pairs that break a conflict rule (measured from the pairs, not assumed), and a hand-checkable lower bound: a track with 6 projects and 3 eligible judges needs someone at load at least 6 for coverage 3, and a connected design needs at least 7. When the reviews do not divide evenly among the eligible judges, the connected bound equals the first bound, because a judge below it can take the bridging review. Dry runs and top-ups are written to the audit chain. The imported fixture is not that design. It is the fixture's own reviews, max load 11, and we do not invent a batch history for it. The dry-run button computes a fresh design without issuing it.
 

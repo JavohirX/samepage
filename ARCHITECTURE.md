@@ -22,7 +22,7 @@ A view declares `action` (what reading the URL needs) and, where a POST needs mo
 
 ## Routes
 
-- Accounts: `/signup`, `/login`, `/logout`, `/password/<token>` (one-time link), `/account` (roles, change password).
+- Accounts: `/signup`, `/login`, `/logout`, `/password/<token>` (one-time link), `/accept/<token>` (accept a judge or organizer role offered to an existing account), `/account` (roles, change password).
 - Events: `/e` (list; POST creates, admins), `/e/new`, `/e/<event>`, `/e/<event>/settings`, `/e/<event>/state`, `/e/<event>/criteria`, `/e/<event>/people`.
 - Teams: `/e/<event>/teams`, `/e/<event>/teams/<team>` with `/invites`, `/invites/<id>/revoke`, `/leave`, `/members/<person>/remove`; `/join/<token>`.
 - Submissions: `/e/<event>/projects` (gallery; POST creates a draft), `/projects/new`, `/projects/<id>` (GET; POST or PATCH edits), `/edit`, `/submit`, `/withdraw`, `/media`, `/media/<n>`, `/media/<n>/delete`.

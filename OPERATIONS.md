@@ -59,7 +59,7 @@ The password comes from `SAMEPAGE_ADMIN_PASSWORD` (or a prompt with a terminal),
 Then sign in at `/login` and:
 
 1. **New event** on the home page: windows (UTC), tracks, prizes, rubric, custom questions, team size. It starts as a draft; **Move to open** on its settings page.
-2. Invite judges and co-organizers by email on the settings page. A new person gets a one-time set-password link on the next page (valid 14 days). Nothing is emailed; send it yourself.
+2. Invite judges and co-organizers by email on the settings page. A new person gets a one-time set-password link on the next page (valid 14 days). An address that already has an account gets a one-time acceptance link instead (valid 14 days): the role is theirs once they open it signed in and accept. Nothing is emailed; send it yourself.
 3. Participants sign up at `/signup`, start a team on the event page and invite their teammates with the team's link.
 4. After the deadline: **Move to closed**, **Move to judging**, then **Issue batches** on the progress page. Watch Progress; top up or abandon batches as judges drop out; reopen a finalized score from the assignments page if a judge asks.
 5. Confirm any duplicate decision, then **Publish results**. The ranking is frozen from then on.

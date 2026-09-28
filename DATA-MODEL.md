@@ -4,7 +4,7 @@ Ids are the fixture's text ids (`evt_01`, `prj_07`, `jdg_08`); rows created in t
 
 ## Event
 
-`event.state` is draft → open → closed → judging → published → archived (`domain/transitions.py`; only forward). `starts_at`, `submissions_close` and `judging_ends` are the windows; `submissions_close` is the deadline both the service and the triggers use. `max_team_size`, `blind_judging`, `description`, `created_by`. `custom_questions` is a JSON list of `{key, label, kind: text|choice, choices, required}`. `track` and `prize_category` belong to one event.
+`event.state` is draft → open → closed → judging → published → archived (`domain/transitions.py`; only forward). `starts_at`, `submissions_close` and `judging_ends` are the windows; `submissions_close` is the deadline both the service and the triggers use. `judging_ends`, when set, is checked by the service on every score save and finalize (409 after it, on the database clock); an organizer can move it later until publish. `max_team_size`, `blind_judging`, `description`, `created_by`. `custom_questions` is a JSON list of `{key, label, kind: text|choice, choices, required}`. `track` and `prize_category` belong to one event.
 
 `criterion` is the rubric: `(event, track, key)` unique, `label`, `weight > 0` (numeric, 4 decimals), `position`. Rows with `track` null are the event's weights; a row with a track overrides that one weight for that track. evt_01 is seeded 1:1:1.
 
@@ -16,6 +16,7 @@ Ids are the fixture's text ids (`evt_01`, `prj_07`, `jdg_08`); rows created in t
 
 - `kind = team`: joins `team`. `expires_at`, `max_uses`, `uses` (CHECK `uses <= max_uses`), `revoked_at`.
 - `kind = password`: lets `person` choose a password once. Issuing a new one revokes the old.
+- `kind = role`: offers an existing `person` the `role` (judge or organizer) on `event`, with the judge's `tracks`. One use; a new offer of the same role revokes an unused one. The `role_grant` row is written when that person, signed in, accepts; until then they hold nothing.
 
 A CHECK ties each kind to its target (`invite_target`).
 
