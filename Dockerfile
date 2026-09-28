@@ -26,6 +26,9 @@ RUN pip install --only-binary=:all: -r requirements.txt
 # The app, fixtures.json (the demo seed) and the tests. .dockerignore keeps out local state.
 COPY . .
 
+# WhiteNoise serves STATIC_ROOT, so collect at build time (no database needed).
+RUN python manage.py collectstatic --noinput -v 0
+
 USER 10001:10001
 EXPOSE 8000
 
