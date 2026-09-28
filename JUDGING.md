@@ -52,11 +52,19 @@ Switching the duplicate to merge retargets prj_07's five reviews onto prj_41, so
 - **Raptors k=10.** (n · raw + 10 · grand) / (n + 10), where grand is the mean of all counted weighted totals. This implements the Code Olympics formula. It does not claim to reproduce every published digit from that event.
 - **Z-scores.** Per judge, (y − mean) / sd. Undefined when n < 2 or sd = 0. On this fixture that includes jdg_07 (straight line) and the one-score judges. The lab shows z as a refused method, with the failure table as the reason. It is not the published ranking.
 
+## Flags
+
+The lab lists judge flags from the counted reviews. Nothing flagged is dropped. `straight_line` is a judge who gave one value on every criterion of every review (jdg_07's 4/4/4). `no_total_variance` is a judge whose weighted totals are all equal, which is also true of jdg_19 (3/5/3, 3/4/4 and 5/4/2 all total 11/3) without being a straight line. `zero_counted` is a judge on the event with no counted review (jdg_01 scored only the withdrawn Dry Harbour row).
+
+## Checked by statsmodels
+
+`tools/oracle_statsmodels.py` (README, check 3) fits statsmodels' MixedLM to the portal's `scores.csv`, evaluates its REML likelihood on this grid and compares λ, every adjusted score, every rank and `ranking_sha256` with `results.json`. On the fixture both sides give λ = 15.32391847910442 and the same ranking hash.
+
 ## Uncertainty
 
 4,000 draws of a ~ N(â, σ̂² (Xᵀ H⁻¹ X)⁻¹), conditional on λ̂. The page says the uncertainty in λ is ignored. It reports a 90% rank interval and P(top-5). The banner names the lowest rank whose project still has P(top-5) ≥ 0.10. On this fixture that band is wide: no top-5 slot is settled.
 
-Leave-one-judge-out refits the grid 30 times and names the judges whose removal changes the top-5 set.
+Leave-one-judge-out refits the grid once per counted judge (29 on the fixture) and names the judges whose removal changes the top-5 set.
 
 ## What this does not prove
 
@@ -67,9 +75,9 @@ Leave-one-judge-out refits the grid 30 times and names the judges whose removal 
 
 ## Assignment
 
-Initial batches and top-up use the same matcher: repeated maximum bipartite matchings. An edge exists only when the judge is eligible for the track, has no conflict of interest, has not already reviewed the project, and is under the load cap (12 by default). Each round uses a judge at most once. Top-up adds at most one extra review per judge.
+The dry run and top-up use the same matcher: repeated maximum bipartite matchings. There is no action that issues a fresh initial design; the dry run only reports one. An edge exists only when the judge is eligible for the track, has no conflict of interest, has not already reviewed the project, and is under the load cap (12 by default). Each round uses a judge at most once. Top-up adds at most one extra review per judge.
 
-The run report prints the load histogram, coverage, component count, articulation judges, the seed, and a hand-checkable lower bound: a track with 6 projects and 3 eligible judges needs someone at load at least 6 for coverage 3, and a connected design needs at least 7. The imported fixture is not that design. It is the fixture's own reviews, max load 11, and we do not invent a batch history for it. The dry-run button computes a fresh design without issuing it.
+The run report prints the load histogram, coverage, component count, articulation judges, the seed, the number of assigned pairs that break a conflict rule (measured from the pairs, not assumed), and a hand-checkable lower bound: a track with 6 projects and 3 eligible judges needs someone at load at least 6 for coverage 3, and a connected design needs at least 7. When the reviews do not divide evenly among the eligible judges, the connected bound equals the first bound, because a judge below it can take the bridging review. Dry runs and top-ups are written to the audit chain. The imported fixture is not that design. It is the fixture's own reviews, max load 11, and we do not invent a batch history for it. The dry-run button computes a fresh design without issuing it.
 
 ## Scores CSV
 

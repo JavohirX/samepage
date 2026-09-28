@@ -1,94 +1,113 @@
 # Samepage
 
-Every number on a page opens as the rows behind it. Each list is also a CSV file and a JSON file. HTML, JSON and CSV come from the same rows, through the same policy check, so a tool we did not write can audit them: the organizers' `run.py`, and a statsmodels container that re-derives the ranking from `scores.csv`.
+A self-hosted hackathon submission and judging portal. Every number on a page opens as the rows behind it: each list is also a CSV file and a JSON file, built from the same rows through the same policy check. Tools we did not write can audit it: the organizers' `run.py`, and a separate statsmodels image that re-derives the published ranking from the `scores.csv` an organizer downloads.
 
-```
-pitch = "Every number on every page opens as the rows behind it: each list page is also a CSV and a JSON file from one policy check, and statsmodels re-derives our normalized ranking from the scores.csv an organizer downloads."
-```
+Claimed tiers: **T1 and T2**. `run.py` prints `claimed T1 T2, verified T1 T2` (see `acceptance-report.txt`, produced by the CI run of `docker compose up`). Several tier bullets that `run.py` does not check are **not built yet**. The table below says which, in plain words.
 
-Claimed tiers: **T1 and T2**. T3 is not built. T4 is not claimed. `run.py` on this repo prints `claimed T1 T2, verified T1 T2`.
+| Tier bullet | State |
+|---|---|
+| T1 login, roles | Built. Password login (CSRF-checked, throttled), bearer tokens, per-event roles in one policy table. |
+| T1 create an event | **Missing.** Events come from the seed. There is no create-event page or API. |
+| T1 form a team | **Missing.** Teams come from the seed. The `invite` table exists but nothing writes it. |
+| T1 submit a project | API only: `POST /e/<event>/projects.json`. There is no HTML submit form. |
+| T1 edit until the deadline | **Missing.** No update route. The database trigger that refuses late edits exists. |
+| T1 deadline stops submissions | Built, twice: the service returns 409 and a trigger refuses the insert. |
+| T1 public gallery | Built. HTML, JSON and CSV, no login. |
+| T2 invite and assign judges | Assign: dry-run and top-up runs (audited). Invite: **missing**. |
+| T2 rubric the organizer can weight | Weights are stored and used with exact fractions, but **no page or API edits them**. |
+| T2 judges cannot see each other's work | Built. 403 before the target id is loaded, in HTML, JSON and CSV. |
+| T2 progress view | Built. Each number links to its CSV and is checked against it on every request. |
+| T2 evening out harsh and generous judges | Built. Profile REML with a fixed grid, shown beside raw means and Raptors k=10 (JUDGING.md). |
+| T2 CSV export | Built. Formula-guarded cells, no literal `null`. |
 
 ## Run it
-
-The first build needs the network, once, to pull images. After that the stack runs with the network off.
 
 ```
 docker compose up --wait
 python run.py .dogfood.toml
 ```
 
-On Windows use `python`, and `curl.exe` rather than PowerShell's `curl` alias. The checker is stdlib only. `fixtures.json` sits next to `run.py`.
+The first build pulls the base images (pinned by digest, amd64 and arm64). After that nothing at runtime needs the network. The portal is on http://localhost:8080, published on 127.0.0.1 only. `fixtures.json` sits next to `run.py` and is also inside the image, where the boot seeds it.
 
-Demo sign-in, printed again when the container boots. The password for all six demo accounts is `samepage-demo`.
+On Windows use `python`, and `curl.exe` rather than PowerShell's `curl` alias. The checker is stdlib only. Running the app without Docker needs Python 3.12 and Postgres (OPERATIONS.md).
 
-| Who | Link | Email |
+## Demo mode
+
+`docker compose up` starts in demo mode (`SAMEPAGE_MODE=demo`). The boot log prints the four bearer headers in `.dogfood.toml`; they are HMACs of a fixed string, so they are the same on every fresh volume. Each page has a demo bar with one button per account. The button is a POST with a CSRF token, so a link or an image on another site cannot sign a browser in. The shared password is `samepage-demo`.
+
+| Who | Account | Lands on |
 |---|---|---|
-| Organizer | http://localhost:8080/demo/enter/org | organizer@example.org |
-| Judge A (jdg_08) | http://localhost:8080/demo/enter/jdg08 | marek.nowak@example.org |
-| Judge B (jdg_03) | http://localhost:8080/demo/enter/jdg03 | priya.nair@example.org |
-| Participant | http://localhost:8080/demo/enter/priya1 | priya1@example.org |
+| Organizer | organizer@example.org | `/e/evt_01/progress` |
+| Judge A (jdg_08) | marek.nowak@example.org | `/e/evt_01/judge/batches` |
+| Judge B (jdg_03) | priya.nair@example.org | `/e/evt_01/judge/batches` |
+| Participant | priya1@example.org | `/e/evt_01/projects` |
+| Participant on the open event | control@example.org | `/e/evt_02/projects` |
+| Admin | admin@example.org | `/e/evt_01/progress` |
 
-Those links exist only in demo mode. Production refuses to boot while a demo token is present (`python tools/task.py` is the local runner; production checks are in OPERATIONS.md).
+Everything in this section is public, so production mode refuses it. With `SAMEPAGE_MODE=production` (the default outside compose) the demo bar and `/demo/enter/*` are 404, demo bearer tokens get 401, the demo password never signs in, and the process refuses to start while demo tokens or demo passwords are in the database, or while the secret key, a database password or `ALLOWED_HOSTS=*` is a default (`samepage/ops/preflight.py`). CI proves both halves: a demo-seeded volume is refused, and a fresh production volume boots and answers 401 to the demo organizer token.
 
-## The check a judge can do
+## The checks a judge can do
 
-**1. The organizers' checker.** `python run.py .dogfood.toml`. Last line: `claimed T1 T2, verified T1 T2`.
+**1. The organizers' checker.** `python run.py .dogfood.toml` ends in `claimed T1 T2, verified T1 T2`.
 
-**2. A number opens as its rows.** Sign in as the organizer and open `/e/evt_01/progress`. The sentence is "121 counted + 5 excluded = 126". The "5 excluded" link is `scores.csv?counted=false`: five rows, all `prj_07`, each `withdrawn_duplicate:dup_01`. The footer says "6 of 6 numbers on this page match their CSV".
+**2. A number opens as its rows.** Sign in as the organizer and open `/e/evt_01/progress`. The sentence is "121 counted + 5 excluded = 126". The "5 excluded" link is `scores.csv?counted=false`: five rows, all `prj_07`, each `withdrawn_duplicate:dup_01`. The footer says how many of the six numbers match the row count of the CSV they link to. It renders each linked CSV through the same code as the download, parses it and counts the rows on every request, and names any number that disagrees.
 
 ```
 curl.exe -s -H "Authorization: Bearer <organizer token from .dogfood.toml>" http://localhost:8080/e/evt_01/scores.csv
 ```
 
-The file has 126 data rows. 121 have `counted=true`.
+**3. statsmodels re-derives the ranking.** With the stack up:
 
-**3. The ranking is re-derived, not asserted.** `/e/evt_01/results` (organizer, before publish) shows raw mean, REML-adjusted and Raptors k=10 on one row. On the deduplicated fixture the engine's λ is 15.324. The top 5 are prj_34, prj_11, prj_25, prj_10 and prj_37, the same set as the raw top 5. Dry Harbour (prj_41) is rank 9 under keep-latest. The duplicates page also prints the merge alternative, which counts prj_07's reviews toward prj_41, including three judges twice.
+```
+docker compose --profile oracle run --rm oracle
+```
 
-`docker compose --profile oracle run --rm oracle` is the outside check: it downloads `scores.csv` and evaluates statsmodels' REML likelihood on the grid in JUDGING.md. The grid is ours. The likelihood is theirs. The check that runs in this tree without that image is the dense inverse of the same model, which matches the Woodbury fit to 1e-9 (`tests/domain/test_reml.py`).
+The oracle image holds statsmodels, pandas and scipy and no Samepage code. It downloads `scores.csv` with the organizer token, fits statsmodels' own MixedLM (a fixed effect per project, a random intercept per judge), evaluates its REML likelihood on the λ grid in JUDGING.md, and compares with `/e/evt_01/results.json`: λ, every review count, every adjusted score, every rank and `ranking_sha256`. It exits 1 on any difference. On the seeded fixture it reports λ 15.32391847910442 on both sides and the same ranking hash. The grid is ours; the likelihood and the effects are statsmodels'. Two projects (prj_09, prj_17) have the same judges and the same scores, so their effects are equal; the oracle checks they hold the same two rank positions and takes their order from the portal's documented tie-break. CI runs it on amd64 and arm64.
+
+**4. The tests.** `docker compose --profile test run --rm test` runs pytest inside the image against the compose Postgres (HTTP role and format matrix, production refusals, CSRF on sign-in, write validation, the progress recount, the REML fit). CI also runs them natively.
 
 ## What that proves
 
 | Proves | Does not prove |
 |---|---|
-| Refusal lives in the backend and covers HTML, JSON and CSV. `run.py` is 7/7. A judge asking for another judge's scores gets 403, not an empty page. | That a database superuser cannot edit a row. The audit chain and a downloaded CSV detect that afterwards. Nothing is signed. |
-| The REML fit is the GLS estimator at the λ that maximises the profile likelihood on a fixed grid. A dense inverse agrees to 1e-9. | That the model suits this data. The project signal is tiny. The results page says the top 5 is a statistical tie. |
-| Every list the organizer sees is the same rows as its CSV. | Anything about T3 or T4. `run.py` does not check them, and we do not claim them. |
-
-## What a visitor, a judge and an organizer actually do
-
-The gallery at `/e/evt_01/projects` is public, server-rendered, in fixture order. Glass Signal, Small Meadow and Deep Compass are on page one. Search and track filters are the same rows in HTML, JSON and CSV. A logged-out request is never redirected: a protected page returns 401 with the sign-in form inline, and a JSON client gets problem+json.
-
-A participant can draft and submit until the deadline. On this fixture the deadline is already past, so `POST /e/evt_01/projects.json` returns 409 with `submissions closed at 2026-03-01T18:00:00Z` before the body is validated. The same POST to the open control event `/e/evt_02/projects.json` returns 201. A database trigger repeats the deadline rule.
-
-A judge scores in `/e/evt_01/judge/batches`. Keys 1–5 set a score, J and K move between criteria, and the page autosaves. The buttons work with JavaScript off. Their own scores are `/e/evt_01/judges/me/scores`. Another judge's URL returns 403 before the id is loaded, so a missing judge is also 403 rather than 404. Participants get 403 on that route too.
-
-An organizer sees progress with every count linked to the filtered CSV, confirms or changes the Dry Harbour decision, reads the normalization lab (raw, z, REML, k=10, the z-score failures, λ sensitivity, leave-one-judge-out), and publishes. Publishing returns 409 until `dup_01` is confirmed. Before publish, anonymous results are 403 with `Cache-Control: private, no-store`. After publish they are public.
-
-`/about/access` is generated from the same policy tables the server enforces.
+| Refusal lives in the backend and covers HTML, JSON and CSV. A judge asking for another judge's scores gets 403, not an empty page. | That a database superuser cannot edit a row. The audit chain and a downloaded CSV detect that afterwards. Nothing is signed. |
+| The REML fit is the GLS estimator at the λ that maximises the profile likelihood on a fixed grid. statsmodels, an independent implementation, gets the same λ and ranking. A dense inverse agrees with the Woodbury form to about 1e-15 (the test asserts 1e-9). | That the model suits this data. The project signal is tiny. The results page says the top 5 is a statistical tie. |
+| The progress numbers equal the row counts of the CSVs they link to, checked on every request. | Anything about T3 or T4. We do not claim them. |
 
 ## Limits
 
-- T3 is not built. No community voting, comments or quadratic voting.
-- No webhooks, certificates, signed judge records or embeddable widget.
-- No OpenAPI file. The JSON and CSV twins exist; "API First" is not claimed.
+Known gaps, not hidden:
+
+- The T1 and T2 bullets marked missing in the table above.
+- Draft (not yet finalized) scores are counted in the ledger and in the next results fit. The results snapshot is rebuilt only at seed time and when a duplicate decision is confirmed, so it can be stale after new scores, and nothing freezes the ranking after publish: a later duplicate switch or score changes what the public results page shows.
+- The demo judges (jdg_08, jdg_03) have only imported, finalized scores, so their console has nothing to score until a top-up assigns them a project. Top-up picks judges pseudo-randomly and may not pick them.
+- There is no unlock for a finalized score: a second finalize with different values is 409.
+- T3 is not built. No webhooks, certificates, signed records, OpenAPI file or embeddable widget.
 - Read isolation is one policy module in application code, not Postgres row-level security.
 - The runtime database role cannot update `score_rev` or the audit log and does not own the tables, so it cannot disable those triggers. The owner password is still in the app container for migrations. A host operator can edit rows. A downloaded CSV is the witness.
-- The statsmodels default fit is a bad guide on this likelihood, which is why the grid is part of the method. See JUDGING.md.
-- Demo bearer tokens are deterministic and printed at boot. They are refused in production mode.
-- Not tested here as a published multi-arch image. `docker compose up` is the path a judge runs. Local development against Postgres uses `DATABASE_URL`.
+- There is no way to bootstrap a real event without the Django shell or SQL: no admin, no create-event route, no import command.
 
 ## Layout
 
-Django 5.2, Django REST Framework, Postgres 16, gunicorn, WhiteNoise, Pico CSS (vendored) and a small `console.js`. Numpy is the only maths library in the runtime image. The oracle image is separate and holds statsmodels, pandas and scipy.
+Django 5.2, Django REST Framework, Postgres 16, gunicorn, WhiteNoise, Pico CSS (vendored, MIT, see NOTICE) and a small `console.js`. Numpy is the only maths library in the runtime image. The oracle image is separate.
 
-`samepage/domain/` has no Django imports. `samepage/engine/` is the REML fit, z-scores and the assignment matcher. Views call services. Services are the writers.
-
-Planning notes from before kickoff are in `plan/`. They are not the product.
+`samepage/domain/` and `samepage/engine/` import no Django (`.importlinter`, checked in CI). Views call services. Services are the writers. ARCHITECTURE.md, DATA-MODEL.md, JUDGING.md, THREAT_MODEL.md and OPERATIONS.md have the details.
 
 ## Tests
 
 ```
-python -m pytest tests/domain tests/test_policy.py
+docker compose --profile test run --rm test
 ```
 
-The REML test refits `fixtures.json` and checks λ, the top-5 set, Dry Harbour at rank 9, and the eight short projects.
+Natively, with Python 3.12 and a Postgres the tests may create a database on:
+
+```
+pip install -r requirements-dev.txt
+DATABASE_URL=postgres://owner:password@127.0.0.1:5432/samepage python -m pytest
+```
+
+Without `DATABASE_URL` only the pure tests (policy tables, REML, rules) run; the database tests are skipped and say so.
+
+## License
+
+Apache License 2.0 (LICENSE). Pico CSS is MIT (NOTICE).

@@ -2,29 +2,52 @@
 
 ## Boot
 
-`python -m samepage.ops.entrypoint` waits for Postgres, migrates as the owner, creates or updates `samepage_app`, seeds the fixture when `SAMEPAGE_MODE=demo`, fits the snapshot, checks the runtime role, drops `DB_OWNER_URL` from the environment, and execs gunicorn.
+`python -m samepage.ops.entrypoint` is the container command. In order it:
+
+1. refuses to start in production mode if the configuration has a public default (see Production), before touching the database;
+2. waits for Postgres and migrates as the owner (`DB_OWNER_URL`);
+3. creates or updates the `samepage_app` role and its grants (every boot, because init scripts do not re-run on a reused volume);
+4. demo mode: seeds `fixtures.json` once, fits the results snapshot, prints the demo tokens. Production mode: refuses to start if demo tokens or demo passwords are in the database;
+5. checks that `samepage_app` cannot update `score_rev` and owns nothing, drops `DB_OWNER_URL` from the environment and execs gunicorn as that role.
 
 ```
 docker compose up --wait
 ```
 
-starts two services: `app` and `db`. Postgres is not published. The web port is `${PORT:-8080}`.
+starts `app` and `db`. Postgres is not published. The web port is `${PORT:-8080}` on `${SAMEPAGE_BIND_ADDR:-127.0.0.1}`. The app container runs as uid 10001 with a read-only root filesystem, no capabilities and a tmpfs `/tmp`. Its healthcheck (`python -m samepage.ops.healthcheck`) sends the first `ALLOWED_HOSTS` entry as the Host header, so it also works in production mode.
 
 Profiles, not started by a plain `up`:
 
-- `ops` — `backup` writes `backups/latest/db.dump` and a media tar. `restore` loads them.
-- `test` — pytest against the owner URL.
-- `oracle` — statsmodels, talking to `http://app:8000`.
+- `ops`: `backup` writes `backups/latest/db.dump` and a media tar. `restore` loads them.
+- `test`: pytest inside the test image, against a `test_samepage` database on the compose Postgres.
+- `oracle`: statsmodels re-derives the ranking from `http://app:8000` (README, check 3).
 
-The database healthcheck uses `pg_isready -h 127.0.0.1`, so it does not report healthy during initdb's socket-only server.
+Logs go to stdout: one gunicorn access line per request with `cid=<correlation id>`, and for every 500 a traceback plus a line with the same correlation id the error page shows as "Reference".
 
 ## Production
 
-Set `SAMEPAGE_MODE=production`, a long `SECRET_KEY`, real database passwords, `ALLOWED_HOSTS`, `PUBLIC_URL`, and `TRUSTED_PROXIES` if a proxy sets `X-Forwarded-For`. Put TLS on the proxy. The process refuses to boot if demo tokens remain, if DEBUG is on, if the secret or database password is a default, or if hosts are `*`.
+`SAMEPAGE_MODE` is `demo` or `production`. Outside compose it defaults to `production`; any other value stops the process.
 
-Password reset without SMTP, once a mailbox exists in the database: set a token out of band and hand the person the link. There is no outbound mailer.
+Set a `SECRET_KEY` of at least 50 characters, `DB_OWNER_PASSWORD` and `DB_APP_PASSWORD` (URL-safe characters; they go into a connection URL), `ALLOWED_HOSTS`, and `PUBLIC_URL`. When `PUBLIC_URL` is https, session and CSRF cookies are marked Secure. Put TLS on a reverse proxy. Behind exactly one proxy that sets `X-Forwarded-For`, set `SAMEPAGE_NUM_PROXIES=1` so the sign-in throttle (10 POSTs a minute per client) keys on the real client.
 
-Upgrade is `git pull`, `docker compose build`, `docker compose up --wait`. Migrations are forward only. Roll back by restoring the backup taken before the upgrade, then checking out the previous tree. Do not expect a reverse migration.
+The process refuses to start, and names each fix, when any of these hold (`samepage/ops/preflight.py`):
+
+- `SECRET_KEY` is the demo key or shorter than 50 characters;
+- `SAMEPAGE_DEBUG=1`;
+- `ALLOWED_HOSTS` contains `*`;
+- the owner or runtime database password is a known default (`demo-owner`, `demo-app`, `postgres`, `password`, `samepage`, empty);
+- the database holds an unrevoked demo bearer token, or a demo account whose password is still `samepage-demo`.
+
+A database first booted in demo mode therefore never serves in production mode. Start production on a new volume (`docker compose down -v`) or a new database. At request time, too, production mode answers 401 to a demo token, never accepts the demo password, and 404s `/demo/enter/*`.
+
+```
+SAMEPAGE_MODE=production SECRET_KEY=... DB_OWNER_PASSWORD=... DB_APP_PASSWORD=... \
+  ALLOWED_HOSTS=portal.example.org PUBLIC_URL=https://portal.example.org docker compose up --wait
+```
+
+A production database starts empty. This build has no admin site, no create-event page and no import command, so the first event, its judges and its teams have to be created in a Django shell as the owner: `docker compose run --rm -e DATABASE_URL=postgres://owner:<owner password>@db:5432/samepage app python manage.py shell` (the models are in `samepage/apps/portal/models.py`). That is the largest gap for a real adopter (README, Limits).
+
+Upgrade is `git pull`, `docker compose build`, `docker compose up --wait`. Migrations are forward only. Roll back by restoring the backup taken before the upgrade, then checking out the previous tree.
 
 ## Backup
 
@@ -33,20 +56,19 @@ docker compose --profile ops run --rm backup
 docker compose --profile ops run --rm restore
 ```
 
-Take a backup before every upgrade.
+Take a backup before every upgrade. `backups/` holds password hashes and token digests; it is in `.gitignore` and `.dockerignore`.
 
 ## Local, without Docker
 
-Postgres must already be running. Create a database and point at it:
+Python 3.12 (the exact-fraction formatting needs it) and a running Postgres. The entrypoint does the same steps as in the container; on Windows it serves with `runserver` instead of gunicorn.
 
 ```
-set DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/samepage
-python manage.py migrate
-python -c "import django; django.setup(); from samepage.services.seed import seed; seed('fixtures.json')"
-python manage.py runserver 127.0.0.1:8080
+pip install -r requirements.txt
+set SAMEPAGE_MODE=demo
+set DB_OWNER_URL=postgres://postgres:postgres@127.0.0.1:5432/samepage
+set BIND=127.0.0.1:8080
+python -m samepage.ops.entrypoint
 ```
-
-Set `SAMEPAGE_FAST_HASH=1` only for tests. The demo seed hashes one shared password.
 
 ## Windows
 
@@ -54,8 +76,8 @@ Set `SAMEPAGE_FAST_HASH=1` only for tests. The demo seed hashes one shared passw
 
 ## If someone forks this
 
-1. Run production mode until it boots clean, then import real registrations.
-2. Invite judges by the accounts you create. The fixture's demo links will be gone.
+1. Run production mode on a new database until it boots clean.
+2. Create the event, tracks, criteria, judges and teams in the Django shell (see Production). This is manual today.
 3. Point people at Download CSV on any organizer list, and at `results.json` after publish.
 
-The first gaps: no SSO, no webhooks, no signed records, and read isolation lives in application code.
+The first gaps: no event or team management in the UI, no SSO, no webhooks, no signed records, and read isolation lives in application code.

@@ -18,7 +18,7 @@ A trigger refuses a native insert after `submissions_close`, and refuses content
 
 ## Scores
 
-`score_rev` is append-only. The current value is the view `score_current` (`DISTINCT ON (judge, submission, criterion) ORDER BY rev DESC`). A new rev after a final rev must be an `unlocked` rev whose audit seq points at `score.unlock`. Identical autosaves do not insert.
+`score_rev` is append-only. The current value is the view `score_current` (`DISTINCT ON (judge, submission, criterion) ORDER BY rev DESC`). A new rev after a final rev must be an `unlocked` rev whose audit seq points at `score.unlock` (trigger `score_final_guard`). No route writes `score.unlock` yet, so a final score stays final and a second finalize with other values is 409. Identical autosaves do not insert. Concurrent saves for one assignment queue on a row lock.
 
 `scores.csv` is one row per judge and project, with the three criterion columns beside it. `counted` is false when the project was withdrawn as a duplicate and not merged.
 
@@ -32,4 +32,4 @@ A trigger refuses a native insert after `submissions_close`, and refuses content
 
 ## Results
 
-`results_snapshot` stores the engine payload and `ranking_sha256` (sha256 of `project_id,rank\n` lines in rank order). A new snapshot is written when a duplicate decision is confirmed.
+`results_snapshot` stores the engine payload and `ranking_sha256` (sha256 of `project_id,rank\n` lines in rank order). A snapshot is written at seed time and when a duplicate decision is confirmed. It is not rewritten after new scores, so it can be stale (README, Limits). Judge flags in the payload: `straight_line` (one value on every criterion of every review), `no_total_variance` (equal weighted totals), `zero_counted`, `one_counted`, `at_most_two`, and `short_projects` (fewer than three counted reviews).
