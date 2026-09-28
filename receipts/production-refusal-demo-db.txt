@@ -1,0 +1,8 @@
+Operations to perform:
+  Apply all migrations: auth, contenttypes, portal, sessions
+Running migrations:
+  No migrations to apply.
+SAMEPAGE_E_PRODUCTION: refusing to start in production mode:
+  - 6 demo bearer token(s) are still valid. This database was seeded in demo mode; start production on a new database (docker compose down -v, or a new DB_OWNER_URL).
+  - organizer@example.org still has the published demo password. Start production on a new database.
+

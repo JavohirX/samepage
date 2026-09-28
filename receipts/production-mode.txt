@@ -1,0 +1,6 @@
+production mode on a fresh volume
+app-1  | samepage production mode: preflight passed
+GET /healthz -> 200
+GET / -> 200
+GET /demo/enter/org -> 404
+GET /e/evt_01/scores.csv with the demo organizer token -> 401

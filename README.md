@@ -66,6 +66,16 @@ The oracle image holds statsmodels, pandas and scipy and no Samepage code. It do
 
 **4. The tests.** `docker compose --profile test run --rm test` runs pytest inside the image against the compose Postgres (HTTP role and format matrix, production refusals, CSRF on sign-in, write validation, the progress recount, the REML fit). CI also runs them natively.
 
+## Receipts
+
+Every file here is the output of a command, copied from the CI run named in `receipts/ci-run.txt` (`gh run view`), not typed:
+
+- `acceptance-report.txt`: `python3 run.py .dogfood.toml` against a cold `docker compose up` on amd64 (arm64 gives the same bytes).
+- `receipts/oracle-statsmodels.txt`: `docker compose --profile oracle run --rm oracle` against that stack.
+- `receipts/production-refusal-demo-db.txt`: production mode started on a volume first seeded in demo mode, with real secrets. It refuses.
+- `receipts/production-mode.txt`: production mode on a fresh volume: it boots, and the demo sign-in and the demo organizer token are refused.
+- `receipts/inputs.txt`: sha256 of `run.py` and `fixtures.json` (`python tools/task.py inputs`), identical to the organizers' files.
+
 ## What that proves
 
 | Proves | Does not prove |

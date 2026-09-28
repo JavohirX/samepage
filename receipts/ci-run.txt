@@ -1,0 +1,8 @@
+run https://github.com/JavohirX/samepage/actions/runs/36433990139
+commit e81007186b04306f84cc0184611fc627c0b19af8
+event push, created 2026-09-28T14:10:34Z, conclusion success
+job boot with container egress blocked (best effort): success
+job native tests + checker + oracle (Python 3.12, Postgres 16): success
+job production mode (amd64): success
+job docker compose (amd64): success
+job docker compose (arm64): success

@@ -1,0 +1,14 @@
+Samepage statsmodels oracle
+portal: http://app:8000 event evt_01
+python 3.12.14, statsmodels 0.14.5, numpy 2.2.6, pandas 2.2.3
+scores.csv sha256 9a8294806d6ca8c37ff071335829a1038498268df8ef8a5e16b8bfa620f22510
+counted rows 121, projects 40, judges 29
+y: mean of the three criterion columns (equals weighted_total on every row)
+statsmodels REML on the JUDGING.md grid (286 points): argmax index 217, lambda 15.32391847910442, loglik -98.0908231948
+portal results.json: method reml, lambda 15.32391847910442
+max |statsmodels effect - portal adjusted (3 dp)| 0.000496
+statsmodels top 5: prj_34 prj_11 prj_25 prj_10 prj_37
+tie group (equal effects, order inside taken from the portal): prj_09 prj_17
+ranking_sha256 statsmodels e06611c796589b646edd7945722a223c5799caf2642c784f5da2fea9b5e903a3
+ranking_sha256 portal      e06611c796589b646edd7945722a223c5799caf2642c784f5da2fea9b5e903a3
+PASS: statsmodels reproduces lambda, every adjusted score, every rank and ranking_sha256
