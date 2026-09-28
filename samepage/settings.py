@@ -1,4 +1,9 @@
-"""Runtime settings. DEBUG is off unless SAMEPAGE_DEBUG=1 and the mode is not production."""
+"""Runtime settings.
+
+SAMEPAGE_MODE is "demo" or "production" and defaults to production, so a missing
+variable never turns the demo sign-in links and the published demo tokens on.
+DEBUG is off unless SAMEPAGE_DEBUG=1 and the mode is demo.
+"""
 
 from __future__ import annotations
 
@@ -6,12 +11,19 @@ import os
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from django.core.exceptions import ImproperlyConfigured
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-MODE = os.environ.get("SAMEPAGE_MODE", "demo")
-DEMO_MODE = MODE != "production"
+MODES = ("demo", "production")
+MODE = os.environ.get("SAMEPAGE_MODE", "production").strip().lower()
+if MODE not in MODES:
+    raise ImproperlyConfigured(f"SAMEPAGE_MODE must be demo or production, not {MODE!r}.")
+DEMO_MODE = MODE == "demo"
 DEBUG = os.environ.get("SAMEPAGE_DEBUG") == "1" and DEMO_MODE
-SECRET_KEY = os.environ.get("SECRET_KEY", "demo-secret-key-not-for-production-use-32b")
+# The demo key is public. Production refuses to boot with it (samepage/ops/preflight.py).
+DEMO_SECRET_KEY = "demo-secret-key-not-for-production-use-32b"
+SECRET_KEY = os.environ.get("SECRET_KEY") or DEMO_SECRET_KEY
 ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1,app").split(",") if h.strip()]
 
 INSTALLED_APPS = [
@@ -129,11 +141,37 @@ REST_FRAMEWORK = {
     "URL_FORMAT_OVERRIDE": None,
     "EXCEPTION_HANDLER": "samepage.core.errors.exception_handler",
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
+    # Only the sign-in POST is throttled (core/throttles.py). run.py's GET routes are not.
+    "DEFAULT_THROTTLE_RATES": {"login": os.environ.get("SAMEPAGE_LOGIN_RATE", "10/min")},
+    # 0 means the throttle keys on the TCP peer and ignores X-Forwarded-For, which a client can forge.
+    # Behind one reverse proxy that sets X-Forwarded-For, set SAMEPAGE_NUM_PROXIES=1.
+    "NUM_PROXIES": int(os.environ.get("SAMEPAGE_NUM_PROXIES", "0")),
 }
 
 CSRF_FAILURE_VIEW = "samepage.core.errors.csrf_failure"
 
 ENGINE_BOOT_BUDGET_S = float(os.environ.get("SAMEPAGE_ENGINE_BOOT_BUDGET_S", "30"))
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:8080")
-TRUSTED_PROXIES = [h.strip() for h in os.environ.get("TRUSTED_PROXIES", "").split(",") if h.strip()]
-DEFAULT_DB_PASSWORDS = {"demo-owner", "demo-app", "postgres", "password"}
+# Passwords that production refuses for the database owner and runtime roles.
+DEFAULT_DB_PASSWORDS = {"", "demo-owner", "demo-app", "postgres", "password", "samepage"}
+
+# Behind TLS, cookies are Secure. Plain http on localhost keeps them usable in demo mode.
+if not DEMO_MODE and PUBLIC_URL.startswith("https://"):
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+# One line per request error on stdout, with the correlation id the error page shows.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "plain": {"format": "%(asctime)s %(levelname)s %(name)s %(message)s"},
+    },
+    "handlers": {
+        "stdout": {"class": "logging.StreamHandler", "stream": "ext://sys.stdout", "formatter": "plain"},
+    },
+    "loggers": {
+        "samepage": {"handlers": ["stdout"], "level": "INFO", "propagate": False},
+        "django.request": {"handlers": ["stdout"], "level": "ERROR", "propagate": False},
+    },
+}

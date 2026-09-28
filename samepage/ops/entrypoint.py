@@ -38,24 +38,50 @@ def _serve() -> None:
         os.execv(sys.executable, [sys.executable, "manage.py", "runserver", f"{host or '127.0.0.1'}:{port}", "--noreload"])
     os.execvp(
         "gunicorn",
-        ["gunicorn", "samepage.wsgi:application", "--bind", bind, "--workers", os.environ.get("WEB_CONCURRENCY", "2")],
+        [
+            "gunicorn",
+            "samepage.wsgi:application",
+            "--bind",
+            bind,
+            "--workers",
+            os.environ.get("WEB_CONCURRENCY", "2"),
+            # One access line per request, carrying the correlation id that error pages show.
+            "--access-logfile",
+            "-",
+            "--access-logformat",
+            '%(h)s "%(r)s" %(s)s %(b)s %(D)sus cid=%({x-correlation-id}o)s',
+        ],
     )
 
 
+def _refuse_config(settings) -> None:
+    from samepage.ops.preflight import refuse_unsafe_production
+
+    refuse_unsafe_production(settings, check_data=False)
+
+
 def main() -> None:
+    import django
+
     if os.environ.get("SAMEPAGE_SERVE_ONLY") == "1":
+        django.setup()
+        from django.conf import settings
+
+        from samepage.ops.preflight import refuse_unsafe_production
+
+        refuse_unsafe_production(settings)
         _serve()
     owner_url = os.environ.get("DB_OWNER_URL") or os.environ.get("DATABASE_URL")
     if not owner_url:
         raise SystemExit("Set DATABASE_URL or DB_OWNER_URL before starting Samepage.")
-    _wait_for_db(owner_url)
     os.environ["DATABASE_URL"] = owner_url
-    import django
-
     django.setup()
     from django.conf import settings
     from django.core.management import call_command
 
+    # Configuration refusals first, so a bad secret fails before any database work.
+    _refuse_config(settings)
+    _wait_for_db(owner_url)
     call_command("migrate", interactive=False)
     if os.environ.get("DB_OWNER_URL"):
         from samepage.ops.roles import ensure_app_role
@@ -75,13 +101,20 @@ def main() -> None:
                 raise
         port = os.environ.get("PORT", "8080")
         print(banner(int(port)), flush=True)
+    else:
+        from samepage.ops.preflight import refuse_unsafe_production
+
+        refuse_unsafe_production(settings)
+        print("samepage production mode: preflight passed", flush=True)
     if os.environ.get("DB_OWNER_URL") and os.environ.get("SAMEPAGE_SKIP_ROLE_CHECK") != "1":
         from samepage.ops.roles import runtime_self_check
-        from urllib.parse import urlparse, urlunparse
+        from urllib.parse import quote, urlparse, urlunparse
 
-        app_password = os.environ.get("DB_APP_PASSWORD", "demo-app")
+        app_password = quote(os.environ.get("DB_APP_PASSWORD", "demo-app"), safe="")
         parsed = urlparse(os.environ["DB_OWNER_URL"])
-        app_url = urlunparse(parsed._replace(netloc=f"samepage_app:{app_password}@{parsed.hostname}:{parsed.port}"))
+        app_url = urlunparse(
+            parsed._replace(netloc=f"samepage_app:{app_password}@{parsed.hostname}:{parsed.port or 5432}")
+        )
         runtime_self_check(app_url)
         os.environ["DATABASE_URL"] = app_url
         os.environ.pop("DB_OWNER_URL", None)

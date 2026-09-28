@@ -1,9 +1,14 @@
-"""Bearer tokens. A present but invalid Authorization header is 401 and never falls back to a cookie."""
+"""Bearer tokens. A present but invalid Authorization header is 401 and never falls back to a cookie.
+
+Demo tokens (api_token.demo) are derived from a secret in this repository. They work only
+in demo mode. Production also refuses to boot while one exists (ops/preflight.py).
+"""
 
 from __future__ import annotations
 
 import hashlib
 
+from django.conf import settings
 from django.utils import timezone
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
@@ -29,6 +34,8 @@ class BearerAuthentication(BaseAuthentication):
             raise AuthenticationFailed("Invalid token.")
         if row.expires_at is not None and row.expires_at <= timezone.now():
             raise AuthenticationFailed("Token expired.")
+        if row.demo and not settings.DEMO_MODE:
+            raise AuthenticationFailed("Demo tokens are refused in production mode.")
         return (row.person, row)
 
     def authenticate_header(self, request):
