@@ -243,6 +243,21 @@ jobs:
           grep -q "GET / -> 200" production-mode.txt
           grep -q "GET /demo/enter/org -> 404" production-mode.txt
           grep -q "demo organizer token -> 401" production-mode.txt
+      - name: An operator bootstraps production and runs one event end to end over HTTP
+        env:
+          SAMEPAGE_MODE: production
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          # No seed and no demo credential: an admin made by the documented command, then only HTTP.
+          SAMEPAGE_ADMIN_PASSWORD="$(openssl rand -hex 16)"
+          export SAMEPAGE_ADMIN_PASSWORD
+          {
+            echo "production mode, fresh volume: manage.py samepage_admin, then tools/lifecycle_check.py"
+            docker compose exec -T -e SAMEPAGE_ADMIN_PASSWORD app python manage.py samepage_admin --email ops@example.org --name Ops
+            python3 tools/lifecycle_check.py --base http://localhost:8080 --admin-email ops@example.org
+          } 2>&1 | tee production-lifecycle.txt
+          grep -q "created admin" production-lifecycle.txt
+          grep -q "^lifecycle PASS" production-lifecycle.txt
       - name: With the database stopped, liveness stays 200 and readiness is 503
         env:
           SAMEPAGE_MODE: production
@@ -271,6 +286,7 @@ jobs:
           path: |
             production-refusal-demo-db.txt
             production-mode.txt
+            production-lifecycle.txt
             readiness-db-down.txt
             compose-production.log
           if-no-files-found: warn
