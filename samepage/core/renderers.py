@@ -35,6 +35,8 @@ NUMERIC_HINTS = {
     "track_rank",
     "lambda",
     "loglik",
+    "lean",
+    "mean_total",
 }
 
 

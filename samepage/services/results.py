@@ -379,7 +379,18 @@ def lab_payload(event_id: str, table: str | None = None) -> dict:
         }
         for row in payload.get("lojo") or []
     ]
+    leans = [
+        {
+            "judge_id": row.get("judge_id"),
+            "n": row.get("n"),
+            "mean_total": "" if row.get("mean_total") is None else round(row["mean_total"], 6),
+            "lean": "" if row.get("lean") is None else round(row["lean"], 6),
+            "flags": row.get("flags") or "",
+        }
+        for row in payload.get("judge_leans") or []
+    ]
     tables = {
+        "judges": {"columns": ["judge_id", "n", "mean_total", "lean", "flags"], "items": leans},
         "ablation": {"columns": ["id", "title", "raw_rank", "z_rank", "reml_rank", "k10_rank", "rank_move_raw"], "items": ablation_items},
         "z-failures": {"columns": ["judge_id", "n", "sd", "reason"], "items": z_items},
         "intervals": {"columns": ["id", "rank", "rank_lo", "rank_hi", "p_top5"], "items": interval_items},
@@ -430,6 +441,7 @@ def lab_payload(event_id: str, table: str | None = None) -> dict:
         "lojo": lojo,
         "limits": limits,
         "flags": payload.get("flags") or {},
+        "judge_leans": leans,
         "flag_rows": [
             {"flag": key, "who": " ".join(value)}
             for key, value in sorted((payload.get("flags") or {}).items())

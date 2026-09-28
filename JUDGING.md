@@ -64,6 +64,10 @@ The results then say `method raw_fallback`. Each project's score is the mean of 
 - **Raptors k=10.** (n · raw + 10 · grand) / (n + 10), where grand is the mean of all counted weighted totals. This implements the Code Olympics formula. It does not claim to reproduce every published digit from that event.
 - **Z-scores.** Per judge, (y − mean) / sd. Undefined when n < 2 or sd = 0. On this fixture that includes jdg_07 (4/4/4 on everything, sd 0) and the one-score judges (jdg_23; jdg_01 once merge counts its one Dry Harbour review). The lab shows z as a refused method, with the failure table as the reason. It is not the published ranking. Nothing divides by a zero standard deviation: the REML fit never uses a per-judge sd, and a judge with one review keeps most of their lean in the noise term.
 
+## Judge leans
+
+The lab's first table (`/e/<event>/normalization/judges.csv`, `.json`) is each judge's estimated lean at λ̂: the BLUP b̂ = g Zᵀ H⁻¹ r, which with one judge per review is Σ rᵢ / (λ + n) over that judge's reviews, where r is the review's weighted total minus its project's adjusted score. It is what the adjusted score removes. A judge with one review has λ + 1 in the denominator, so most of what looks like a lean stays in the noise. On the fixture the largest lean is jdg_02 at +0.144; jdg_07, who gave 4/4/4 to everything, is at +0.066 and keeps full weight (flagged `straight_line`, never dropped); jdg_23, with one review, is at −0.028. `tests/domain/test_reml.py` checks the formula against a dense inverse.
+
 ## Flags
 
 The lab lists judge flags from the counted reviews. Nothing flagged is dropped. `straight_line` is a judge who gave one value on every criterion of every review (jdg_07's 4/4/4). `no_total_variance` is a judge whose weighted totals are all equal, which is also true of jdg_19 (3/5/3, 3/4/4 and 5/4/2 all total 11/3) without being a straight line. `zero_counted` is a judge on the event with no counted review (jdg_01 scored only the withdrawn Dry Harbour row).

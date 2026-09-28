@@ -301,6 +301,21 @@ def test_a_team_member_cannot_be_made_a_judge_of_the_same_event(client, bearer):
 # --- the fixture's awkward cases ---------------------------------------------------------------
 
 
+def test_the_lab_lists_each_judges_lean_in_html_json_and_csv(client, bearer):
+    lab = client.get("/e/evt_01/normalization.json", **bearer("org")).json()
+    leans = {row["judge_id"]: row for row in lab["judge_leans"]}
+    assert abs(leans["jdg_07"]["lean"] - 0.0665) < 1e-3 and "straight_line" in leans["jdg_07"]["flags"]
+    # jdg_01 is on the event with no counted review: listed, with no lean to estimate.
+    assert leans["jdg_01"]["n"] == 0 and leans["jdg_01"]["lean"] == ""
+    rows = _rows(client.get("/e/evt_01/normalization/judges.csv", **bearer("org")))
+    by_judge = {row["judge_id"]: row for row in rows}
+    # A negative lean is a number in the CSV, not a formula-guarded text cell.
+    assert float(by_judge["jdg_23"]["lean"]) < 0 and not by_judge["jdg_23"]["lean"].startswith("'")
+    page = client.get("/e/evt_01/normalization", **bearer("org")).content.decode("utf-8")
+    assert "Judge leans" in page and 'data-field="lean" value="0.06647' in page
+    assert client.get("/e/evt_01/normalization/judges.json", **bearer("jdg08")).status_code == 403
+
+
 def test_normalization_survives_zero_variance_and_one_review_judges(client, bearer):
     lab = client.get("/e/evt_01/normalization.json", **bearer("org")).json()
     assert lab["method"] == "reml"

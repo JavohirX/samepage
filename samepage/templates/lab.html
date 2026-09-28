@@ -9,6 +9,7 @@
     · ICC <data data-field="icc" value="{{ payload.icc }}">{{ payload.icc }}</data>
   </p>
   <p class="tools">
+    <a href="/e/{{ event_id }}/normalization/judges.csv">Judge leans CSV</a>
     <a href="/e/{{ event_id }}/normalization/ablation.csv">Ablation CSV</a>
     <a href="/e/{{ event_id }}/normalization/z-failures.csv">Z failures CSV</a>
     <a href="/e/{{ event_id }}/normalization/intervals.csv">Intervals CSV</a>
@@ -16,7 +17,21 @@
     <a href="/e/{{ event_id }}/normalization/lojo.csv">Leave-one-judge-out CSV</a>
   </p>
 </header>
-{% if payload.method == "raw_fallback" %}<p class="banner">normalization unavailable: raw means, ranks provisional</p>{% endif %}
+{% if payload.method == "raw_fallback" %}<p class="banner">{{ payload.banner }}</p>{% endif %}
+<h2>Judge leans</h2>
+<p>How far each judge's weighted totals sit above (+) or below (−) what the fit expects for the projects they scored, at λ̂. The adjusted score removes this. A judge with few reviews is pulled towards 0: lean = Σ residuals / (λ + n). Nobody is dropped; a flagged judge counts at full weight.</p>
+<div class="overflow-auto">
+<table>
+  <thead><tr><th>Judge</th><th>n</th><th>Mean total</th><th>Lean</th><th>Flags</th></tr></thead>
+  <tbody>
+  {% for row in payload.judge_leans %}
+  <tr><td><data data-field="judge_id" value="{{ row.judge_id }}">{{ row.judge_id }}</data></td><td>{{ row.n }}</td><td>{% if row.mean_total != "" %}{{ row.mean_total|floatformat:3 }}{% endif %}</td><td><data data-field="lean" value="{{ row.lean }}">{% if row.lean != "" %}{{ row.lean|floatformat:3 }}{% endif %}</data></td><td>{{ row.flags }}</td></tr>
+  {% empty %}
+  <tr><td colspan="5">No leans in this snapshot: the model was not fitted, or the snapshot was built before this table existed.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
 <h2>Ablation</h2>
 <div class="overflow-auto">
 <table>

@@ -96,7 +96,6 @@ Known gaps, not hidden:
 
 - Nothing is emailed. Team invite links, set-password links and role acceptance links are shown once, to the person who created them, to pass on by hand. The portal runs offline by design.
 - On an event too small for the judge-bias fit (within every project, all reviews agree), results fall back to the plain mean of the weighted totals with no judge adjustment, and the results page says so (JUDGING.md, "When the model cannot be fitted").
-- Judge leans (the estimated per-judge bias the fit removes) are not shown on any page; the lab shows the flags, the z-score failures and the ranking with and without the adjustment.
 - There is no self-service password reset. An operator runs `python manage.py changepassword <email>`. An organizer can hand out a set-password link only for an account that has never had a password and has no role on another event.
 - Tracks, prize categories and events cannot be deleted from the UI, only added; event states only move forward. An issued assignment cannot be withdrawn, only its batch abandoned (its unfinished work is then topped up to other judges).
 - The public gallery shows every track to everyone, judges included. Track scoping applies to judging: a judge is assigned, sees in the console and scores only projects in their tracks, and reads only their own scores.

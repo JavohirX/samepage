@@ -223,6 +223,7 @@ def build_snapshot(
     anova = anova_k(y, project_ids)
     present = set(judges_present or judges)
     flags = _flags(reviews, projects_meta, z_rows, present, n_reviews)
+    leans = judge_leans(judge_ids, y, y - x @ beta, chosen["lambda"], present, flags)
 
     return {
         "method": "reml",
@@ -248,6 +249,7 @@ def build_snapshot(
         "sensitivity": sensitivity,
         "lojo": lojo,
         "flags": flags,
+        "judge_leans": leans,
         "kendall_raw": kendall_tau_b({row["id"]: row["rank"] for row in ordered}, raw_ranks),
         "seed": seed,
         "input_sha256": _input_sha(reviews),
@@ -337,6 +339,34 @@ def _lojo(reviews, weights, projects, top5: list[str]) -> list[dict]:
                 "top5_changed": set(top) != base,
                 "top5": top,
                 "note": "",
+            }
+        )
+    return rows
+
+
+def judge_leans(judge_ids, y, resid, lam: float, present: set, flags: dict) -> list[dict]:
+    """Each judge's estimated lean at λ̂: the BLUP b̂ = g Zᵀ H⁻¹ r with g = 1/λ.
+
+    Each review has one judge, so ZᵀZ is diagonal and b̂_j = Σ r_i / (λ + n_j) over judge j's
+    reviews, where r = y − X â. A judge with few reviews is pulled towards 0: one review is not
+    evidence of a lean. This is what the adjusted score removes.
+    """
+    totals: dict[str, list[float]] = defaultdict(list)
+    residuals: dict[str, float] = defaultdict(float)
+    for judge, value, r in zip(judge_ids, y, resid):
+        totals[judge].append(float(value))
+        residuals[judge] += float(r)
+    rows = []
+    for judge in sorted(set(totals) | set(present)):
+        n = len(totals.get(judge, []))
+        lean = residuals[judge] / (lam + n) if n else None
+        rows.append(
+            {
+                "judge_id": judge,
+                "n": n,
+                "mean_total": (sum(totals[judge]) / n) if n else None,
+                "lean": lean,
+                "flags": " ".join(sorted(key for key, who in flags.items() if key != "short_projects" and judge in who)),
             }
         )
     return rows
