@@ -156,6 +156,12 @@ REST_FRAMEWORK = {
 
 CSRF_FAILURE_VIEW = "samepage.core.errors.csrf_failure"
 
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    # The sign-in throttle counts in Postgres (migration 0003), so the limit holds across gunicorn workers.
+    "throttle": {"BACKEND": "django.core.cache.backends.db.DatabaseCache", "LOCATION": "samepage_cache"},
+}
+
 ENGINE_BOOT_BUDGET_S = float(os.environ.get("SAMEPAGE_ENGINE_BOOT_BUDGET_S", "30"))
 PUBLIC_URL = os.environ.get("PUBLIC_URL", "http://localhost:8080")
 # Passwords that production refuses for the database owner and runtime roles.

@@ -59,6 +59,23 @@ def test_login_is_throttled_but_get_routes_are_not(client):
     assert all(client.get("/e/evt_01/projects").status_code == 200 for _ in range(30))
 
 
+def test_login_count_is_shared_by_every_worker(client):
+    """The count sits in Postgres, so a worker with empty memory still sees the earlier attempts."""
+    from django.core.cache import caches
+    from django.db import connection
+
+    for _ in range(10):
+        client.post("/login", {"email": "organizer@example.org", "password": "wrong"})
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT count(*) FROM samepage_cache WHERE cache_key LIKE %s", ["%throttle_login_%"])
+        assert cursor.fetchone()[0] == 1
+    # What a second gunicorn worker has in memory: nothing.
+    caches["default"].clear()
+    response = client.post("/login", {"email": "organizer@example.org", "password": "wrong"})
+    assert response.status_code == 429
+    assert int(response["Retry-After"]) > 0
+
+
 @pytest.mark.parametrize("suffix", [".json", ".csv"])
 @pytest.mark.parametrize("who", [None, "org", "priya1"])
 def test_login_has_no_api_twin(client, bearer, suffix, who):

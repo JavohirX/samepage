@@ -31,7 +31,7 @@ Logs go to stdout: one gunicorn access line per request with `cid=<correlation i
 
 `SAMEPAGE_MODE` is `demo` or `production`. Outside compose it defaults to `production`; any other value stops the process.
 
-Set a `SECRET_KEY` of at least 50 characters, `DB_OWNER_PASSWORD` and `DB_APP_PASSWORD` (URL-safe characters; they go into a connection URL), `ALLOWED_HOSTS`, and `PUBLIC_URL`. When `PUBLIC_URL` is https, session and CSRF cookies are marked Secure. Put TLS on a reverse proxy. Behind exactly one proxy that sets `X-Forwarded-For`, set `SAMEPAGE_NUM_PROXIES=1` so the sign-in throttle (10 POSTs a minute per client) keys on the real client.
+Set a `SECRET_KEY` of at least 50 characters, `DB_OWNER_PASSWORD` and `DB_APP_PASSWORD` (URL-safe characters; they go into a connection URL), `ALLOWED_HOSTS`, and `PUBLIC_URL`. When `PUBLIC_URL` is https, session and CSRF cookies are marked Secure. Put TLS on a reverse proxy. Behind exactly one proxy that sets `X-Forwarded-For`, set `SAMEPAGE_NUM_PROXIES=1` so the sign-in throttle (10 POSTs a minute per client) keys on the real client. The throttle counts in a Postgres table (`samepage_cache`), so the limit holds across all gunicorn workers.
 
 The process refuses to start, and names each fix, when any of these hold (`samepage/ops/preflight.py`):
 

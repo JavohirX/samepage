@@ -11,7 +11,7 @@
 | Web cache deception | A path like `/scores.json/x.csv` is not a route. | |
 | CSRF on cookie sessions | Enforced for signed-in writes (DRF session authentication) and for the two anonymous writes that start a session, `POST /login` and `POST /demo/enter/<slug>`, which check the token themselves. Bearer requests are exempt because they are not cookie sessions. | `tests/test_sessions.py` |
 | Login CSRF through a GET | `/demo/enter/<slug>` answers a GET with a page and a button; only the POST signs in. | `tests/test_sessions.py` |
-| Password guessing | `POST /login` is throttled to 10 a minute per client address (the TCP peer unless `SAMEPAGE_NUM_PROXIES` is set). GET routes are never throttled. | `tests/test_sessions.py` |
+| Password guessing | `POST /login` is throttled to 10 a minute per client address (the TCP peer unless `SAMEPAGE_NUM_PROXIES` is set). The count is kept in Postgres, so every gunicorn worker shares it. GET routes are never throttled. | `tests/test_sessions.py` |
 | Login redirect hiding a 401 | No redirects on refusal. The sign-in form is rendered with status 401 and `WWW-Authenticate: Bearer`. | `tests/test_http.py` |
 | Tracebacks in error bodies | DEBUG is off outside demo mode and off by default in demo mode. A 500 returns a problem body with a reference id and no stack; the stack goes to the log with the same id. | `tests/test_writes.py` |
 | Bad input causing 500s | Bodies must be objects, text fields must be text, tracks must belong to the event, a final score is 409, an illegal state change is 409, a trigger refusal is 409. Refused requests roll back. | `tests/test_writes.py` |
