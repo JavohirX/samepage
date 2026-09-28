@@ -63,13 +63,20 @@ def _when(body: dict, field: str, errors: dict, *, required: bool) -> datetime |
     if not isinstance(raw, str):
         errors[field] = "Expected an ISO 8601 date and time."
         return None
-    parsed = parse_datetime(raw.strip())
+    try:
+        # Well-formed but impossible (2026-02-30, month 13, a +25:00 offset) raises instead of returning None.
+        parsed = parse_datetime(raw.strip())
+        if parsed is not None:
+            if parsed.tzinfo is None:
+                # The form's datetime-local field has no zone. Every time on this site is UTC.
+                parsed = parsed.replace(tzinfo=dt_timezone.utc)
+            parsed.astimezone(dt_timezone.utc)
+    except (ValueError, OverflowError):
+        errors[field] = "Not a real date and time, e.g. 2026-10-01T18:00:00Z."
+        return None
     if parsed is None:
         errors[field] = "Expected an ISO 8601 date and time, e.g. 2026-10-01T18:00:00Z."
         return None
-    if parsed.tzinfo is None:
-        # The form's datetime-local field has no zone. Every time on this site is UTC.
-        parsed = parsed.replace(tzinfo=dt_timezone.utc)
     return parsed
 
 

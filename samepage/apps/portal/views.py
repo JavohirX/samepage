@@ -20,7 +20,7 @@ from samepage.core.headers import annotate
 from samepage.core.policy import hidden_fields
 from samepage.core.throttles import LoginThrottle
 from samepage.core.renderers import negotiate, render_payload
-from samepage.core.views import SamepageView
+from samepage.core.views import NUL_MESSAGE, SamepageView, nul_field
 from samepage.domain.deadline import is_closed
 from samepage.domain.tokens import DEMO_PASSWORD, PRINCIPALS
 from samepage.domain.transitions import EVENT as EVENT_MACHINE
@@ -54,8 +54,14 @@ LIST_FIELDS = ("tracks",)
 
 def _body(request) -> dict:
     """The request body as one flat object. A form post keeps the last value of each field,
-    except the multi-select fields in LIST_FIELDS, which keep every value."""
+    except the multi-select fields in LIST_FIELDS, which keep every value.
+
+    Text with a NUL character is refused here with 422, for every write that reads a body
+    (sign-in and sign-up included): Postgres text cannot hold it."""
     data = request.data
+    field = nul_field(data)
+    if field:
+        raise Unprocessable({field: NUL_MESSAGE})
     if hasattr(data, "dict"):
         flat = data.dict()
         for field in LIST_FIELDS:
