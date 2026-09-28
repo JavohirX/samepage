@@ -6,7 +6,7 @@ One URL is one resource. The suffix picks the format.
 - `/e/evt_01/scores.json` is JSON. The top-level value is an object.
 - `/e/evt_01/scores.csv` is RFC 4180 CSV.
 
-All three go through one view class (`SamepageView`), one `policy.allows` check, one query, and one list of dicts. Only the renderer differs. Suffixed patterns are registered first, with slug converters, so `prj_01.json` is not captured as an id. `?format=` is disabled. An unknown suffix is 404. `/judges/me/scores.json/x.csv` does not match a route, so it is 404 rather than a cached private body.
+All three go through one view class (`SamepageView`), one `policy.allows` check, one query, and one list of dicts. Only the renderer differs. Suffixed patterns are registered first, with slug converters, so `prj_01.json` is not captured as an id. `?format=` is disabled. An unknown suffix is 404. A 404 or 500 raised before any view runs still follows the URL: a `.json` or `.csv` URL gets problem+json, not an HTML page. `/login` is HTML only and has no suffixed twin. `/judges/me/scores.json/x.csv` does not match a route, so it is 404 rather than a cached private body.
 
 ## Request order
 
@@ -30,7 +30,7 @@ Writes use the same view. The suffix, if any, picks the response. Otherwise a fo
 
 ## Readiness
 
-`/healthz` is process liveness. `/readyz` checks the database. Neither waits on the REML fit. If the fit raises or the boot budget is 0, results fall back to raw means and say so. `scores.csv` never waits on the engine.
+`/healthz` is process liveness and never touches the database. `/readyz` checks the database and answers 503 problem+json when it cannot reach it. Both run outside the per-request transaction, because opening that transaction is what fails first when Postgres is down. Neither waits on the REML fit. If the fit raises or the boot budget is 0, results fall back to raw means and say so. `scores.csv` never waits on the engine.
 
 ## Roles in the database
 

@@ -59,6 +59,17 @@ def test_login_is_throttled_but_get_routes_are_not(client):
     assert all(client.get("/e/evt_01/projects").status_code == 200 for _ in range(30))
 
 
+@pytest.mark.parametrize("suffix", [".json", ".csv"])
+@pytest.mark.parametrize("who", [None, "org", "priya1"])
+def test_login_has_no_api_twin(client, bearer, suffix, who):
+    headers = bearer(who) if who else {}
+    for method in (client.get, client.post):
+        response = method(f"/login{suffix}", **headers)
+        assert response.status_code == 404
+        assert "Location" not in response
+        assert response["Content-Type"].startswith("application/problem+json")
+
+
 def test_login_next_cannot_leave_the_site(client):
     response = client.post(
         "/login", {"email": "organizer@example.org", "password": "samepage-demo", "next": "https://evil.example/"}

@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import logging
+
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
-from django.db import connection
+from django.db import DatabaseError, connection, transaction
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
+from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework.exceptions import NotFound
 
 from samepage.apps.portal.models import AssignmentRun, Batch, Event, Person
 from samepage.core.csrf import enforce_csrf
-from samepage.core.errors import Unprocessable
+from samepage.core.errors import Unprocessable, problem_response
 from samepage.core.headers import annotate
 from samepage.core.policy import hidden_fields
 from samepage.core.throttles import LoginThrottle
@@ -21,6 +24,9 @@ from samepage.core.views import SamepageView
 from samepage.domain.tokens import DEMO_PASSWORD, PRINCIPALS
 from samepage.services import access, duplicates, judging, ledger, results, submissions
 from samepage.services.audit import verify
+
+
+logger = logging.getLogger("samepage.errors")
 
 
 class Redirect303(HttpResponseRedirect):
@@ -56,16 +62,29 @@ def _json(request, payload, status, location, fmt):
     return annotate(response, request, fmt=fmt, public_cache=False)
 
 
+# Health and readiness run outside ATOMIC_REQUESTS. Opening the request transaction is itself what
+# fails when Postgres is down, which would make liveness depend on the database and turn the
+# readiness 503 below into a 500 raised before the view runs.
+@method_decorator(transaction.non_atomic_requests, name="dispatch")
 class HealthView(SamepageView):
     def get(self, request, fmt=None):
         return annotate(JsonResponse({"ok": True}), request, fmt=fmt, public_cache=False)
 
 
+@method_decorator(transaction.non_atomic_requests, name="dispatch")
 class ReadyView(SamepageView):
     def get(self, request, fmt=None):
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+        except DatabaseError as exc:
+            reason = (str(exc).strip().splitlines() or [""])[0]
+            logger.warning(
+                "not ready correlation_id=%s %s: %s", getattr(request, "correlation_id", ""), type(exc).__name__, reason
+            )
+            # Readiness is a JSON endpoint in every suffix, so the refusal is problem+json too.
+            return problem_response(request, 503, "The database is not reachable.", fmt="json")
         return annotate(JsonResponse({"ok": True}), request, fmt=fmt, public_cache=False)
 
 

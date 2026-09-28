@@ -38,7 +38,17 @@ TITLES = {
     422: "Unprocessable Content",
     429: "Too Many Requests",
     500: "Internal Server Error",
+    503: "Service Unavailable",
 }
+
+SUFFIXES = ("html", "json", "csv")
+
+
+def suffix_of(request) -> str | None:
+    """The format a URL asks for by its suffix, for responses made before any view saw the URL."""
+    last = request.path.rsplit("/", 1)[-1]
+    _stem, dot, ext = last.rpartition(".")
+    return ext if dot and ext in SUFFIXES else None
 
 
 class Conflict(APIException):
@@ -165,11 +175,11 @@ def exception_handler(exc, context):
 
 
 def csrf_failure(request, reason=""):
-    return problem_response(request, 403, "CSRF check failed.")
+    return problem_response(request, 403, "CSRF check failed.", fmt=suffix_of(request))
 
 
 def handle_404(request, exception):
-    return problem_response(request, 404, "Not found.")
+    return problem_response(request, 404, "Not found.", fmt=suffix_of(request))
 
 
 def handle_500(request):
@@ -180,4 +190,5 @@ def handle_500(request):
         request.method,
         request.path,
     )
-    return problem_response(request, 500, "Something went wrong.")
+    # A .json URL gets problem+json even when the failure (a database that is down) came before the view.
+    return problem_response(request, 500, "Something went wrong.", fmt=suffix_of(request))

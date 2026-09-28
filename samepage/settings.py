@@ -70,6 +70,10 @@ TEMPLATES = [
     }
 ]
 
+# Without it psycopg waits up to 130 s for an unreachable database; /readyz should say 503 well before that.
+DB_OPTIONS = {"connect_timeout": 5}
+
+
 def _parse_database_url(url: str) -> dict:
     parsed = urlparse(url)
     return {
@@ -81,6 +85,7 @@ def _parse_database_url(url: str) -> dict:
         "PORT": str(parsed.port or 5432),
         "ATOMIC_REQUESTS": True,
         "CONN_HEALTH_CHECKS": True,
+        "OPTIONS": dict(DB_OPTIONS),
     }
 
 
@@ -98,6 +103,7 @@ def _databases() -> dict:
             "PORT": os.environ.get("DB_PORT", "5432"),
             "ATOMIC_REQUESTS": True,
             "CONN_HEALTH_CHECKS": True,
+            "OPTIONS": dict(DB_OPTIONS),
         }
     }
 

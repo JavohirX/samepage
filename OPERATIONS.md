@@ -22,6 +22,8 @@ Profiles, not started by a plain `up`:
 - `test`: pytest inside the test image, against a `test_samepage` database on the compose Postgres.
 - `oracle`: statsmodels re-derives the ranking from `http://app:8000` (README, check 3).
 
+`/healthz` answers 200 while the process runs, whatever the database state. `/readyz` answers 503 `application/problem+json` when Postgres cannot be reached within the 5 second connect timeout.
+
 Logs go to stdout: one gunicorn access line per request with `cid=<correlation id>`, and for every 500 a traceback plus a line with the same correlation id the error page shows as "Reference".
 
 ## Production

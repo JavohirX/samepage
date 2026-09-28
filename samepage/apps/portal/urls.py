@@ -15,7 +15,8 @@ urlpatterns = []
 urlpatterns += fpath("healthz", views.HealthView, "healthz")
 urlpatterns += fpath("readyz", views.ReadyView, "readyz")
 urlpatterns += fpath("", views.HomeView, "home")
-urlpatterns += fpath("login", views.LoginView, "login")
+# The sign-in form answers HTML only, so it has no .json or .csv twin (those URLs are 404).
+urlpatterns += [path("login", views.LoginView.as_view(), name="login")]
 urlpatterns += [path("logout", views.LogoutView.as_view(), name="logout")]
 urlpatterns += [path("demo/enter/<slug:slug>", views.DemoEnterView.as_view(), name="demo-enter")]
 urlpatterns += fpath("about/access", views.AccessView, "access")

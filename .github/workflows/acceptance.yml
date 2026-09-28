@@ -233,6 +233,23 @@ jobs:
           grep -q "GET / -> 200" production-mode.txt
           grep -q "GET /demo/enter/org -> 404" production-mode.txt
           grep -q "demo organizer token -> 401" production-mode.txt
+      - name: With the database stopped, liveness stays 200 and readiness is 503
+        env:
+          SAMEPAGE_MODE: production
+          ALLOWED_HOSTS: localhost,127.0.0.1
+        run: |
+          docker compose stop db
+          base=http://localhost:8080
+          {
+            echo "production mode, database container stopped"
+            printf 'GET /healthz -> %s\n' "$(curl -s -o /dev/null -m 30 -w '%{http_code}' $base/healthz)"
+            printf 'GET /readyz.json -> %s\n' "$(curl -s -o /dev/null -m 30 -w '%{http_code} %{content_type}' $base/readyz.json)"
+            printf 'GET /e/evt_01/projects.json -> %s\n' \
+              "$(curl -s -o /dev/null -m 30 -w '%{http_code} %{content_type}' $base/e/evt_01/projects.json)"
+          } | tee readiness-db-down.txt
+          grep -q "GET /healthz -> 200" readiness-db-down.txt
+          grep -q "GET /readyz.json -> 503 application/problem+json" readiness-db-down.txt
+          grep -q "GET /e/evt_01/projects.json -> 500 application/problem+json" readiness-db-down.txt
       - name: Collect logs
         if: always()
         run: docker compose logs --no-color --timestamps > compose-production.log 2>&1 || true
@@ -244,6 +261,7 @@ jobs:
           path: |
             production-refusal-demo-db.txt
             production-mode.txt
+            readiness-db-down.txt
             compose-production.log
           if-no-files-found: warn
       - name: Tear down
