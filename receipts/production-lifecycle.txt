@@ -1,82 +1,82 @@
 production mode, fresh volume: manage.py samepage_admin, then tools/lifecycle_check.py
-created admin per_e07c655042 ops@example.org
+created admin per_571d743704 ops@example.org
      admin GET /login -> 401  the sign-in form
      admin POST /login -> 303
      admin POST /e.json -> 201
-     admin POST /e/evt_9f9d9af2/state.json -> 200
-     admin GET /e/evt_9f9d9af2.json -> 200
+     admin POST /e/evt_22f5445e/state.json -> 200
+     admin GET /e/evt_22f5445e.json -> 200
      team0 GET /signup -> 200
      team0 POST /signup -> 303
-     team0 POST /e/evt_9f9d9af2/teams.json -> 201
-     team0 POST /e/evt_9f9d9af2/projects.json -> 201
-     team0 PATCH /e/evt_9f9d9af2/projects/prj_0284e470.json -> 200
-  stranger GET /e/evt_9f9d9af2/projects/prj_0284e470.json -> 403  a draft is private
-     team0 POST /e/evt_9f9d9af2/projects/prj_0284e470/submit.json -> 200
+     team0 POST /e/evt_22f5445e/teams.json -> 201
+     team0 POST /e/evt_22f5445e/projects.json -> 201
+     team0 PATCH /e/evt_22f5445e/projects/prj_fc01ee09.json -> 200
+  stranger GET /e/evt_22f5445e/projects/prj_fc01ee09.json -> 403  a draft is private
+     team0 POST /e/evt_22f5445e/projects/prj_fc01ee09/submit.json -> 200
      team1 GET /signup -> 200
      team1 POST /signup -> 303
-     team1 POST /e/evt_9f9d9af2/teams.json -> 201
-     team1 POST /e/evt_9f9d9af2/projects.json -> 201
-     team1 PATCH /e/evt_9f9d9af2/projects/prj_28881ab4.json -> 200
-  stranger GET /e/evt_9f9d9af2/projects/prj_28881ab4.json -> 403  a draft is private
-     team1 POST /e/evt_9f9d9af2/projects/prj_28881ab4/submit.json -> 200
+     team1 POST /e/evt_22f5445e/teams.json -> 201
+     team1 POST /e/evt_22f5445e/projects.json -> 201
+     team1 PATCH /e/evt_22f5445e/projects/prj_79a025f6.json -> 200
+  stranger GET /e/evt_22f5445e/projects/prj_79a025f6.json -> 403  a draft is private
+     team1 POST /e/evt_22f5445e/projects/prj_79a025f6/submit.json -> 200
      team2 GET /signup -> 200
      team2 POST /signup -> 303
-     team2 POST /e/evt_9f9d9af2/teams.json -> 201
-     team2 POST /e/evt_9f9d9af2/projects.json -> 201
-     team2 PATCH /e/evt_9f9d9af2/projects/prj_e8d3e7af.json -> 200
-  stranger GET /e/evt_9f9d9af2/projects/prj_e8d3e7af.json -> 403  a draft is private
-     team2 POST /e/evt_9f9d9af2/projects/prj_e8d3e7af/submit.json -> 200
-     team0 POST /e/evt_9f9d9af2/teams/tm_2168f346/invites.json -> 201
+     team2 POST /e/evt_22f5445e/teams.json -> 201
+     team2 POST /e/evt_22f5445e/projects.json -> 201
+     team2 PATCH /e/evt_22f5445e/projects/prj_87768873.json -> 200
+  stranger GET /e/evt_22f5445e/projects/prj_87768873.json -> 403  a draft is private
+     team2 POST /e/evt_22f5445e/projects/prj_87768873/submit.json -> 200
+     team0 POST /e/evt_22f5445e/teams/tm_29d6f170/invites.json -> 201
     friend GET /signup -> 200
     friend POST /signup -> 303
-    friend POST /join/tj_RmU-gmW257TX7jTfAwvKsk82wVpv43gD.json -> 200  joined by invite link
-   visitor GET /e/evt_9f9d9af2/projects.json -> 200
-     admin POST /e/evt_9f9d9af2/people.json -> 201
-    judge0 GET /password/pw_2nttNJghD_srIZgzAq-Psskn_Cayy0nF -> 200
-    judge0 POST /password/pw_2nttNJghD_srIZgzAq-Psskn_Cayy0nF -> 303
-     admin POST /e/evt_9f9d9af2/people.json -> 201
-    judge1 GET /password/pw_0XxJfU1BUohawwexiwCwJ2gqHCZdNbue -> 200
-    judge1 POST /password/pw_0XxJfU1BUohawwexiwCwJ2gqHCZdNbue -> 303
-     admin POST /e/evt_9f9d9af2/people.json -> 201
-    judge2 GET /password/pw_fm5VPB8UMdEuU600oqiPxQJr8X7gVf_7 -> 200
-    judge2 POST /password/pw_fm5VPB8UMdEuU600oqiPxQJr8X7gVf_7 -> 303
-     admin POST /e/evt_9f9d9af2/settings.json -> 200
+    friend POST /join/tj_1AOIE4C3r7y484Loh0usvzntOMR0PewO.json -> 200  joined by invite link
+   visitor GET /e/evt_22f5445e/projects.json -> 200
+     admin POST /e/evt_22f5445e/people.json -> 201
+    judge0 GET /password/pw_zaFcYHT1EuGMuF66cwxul_sSway0ZnBu -> 200
+    judge0 POST /password/pw_zaFcYHT1EuGMuF66cwxul_sSway0ZnBu -> 303
+     admin POST /e/evt_22f5445e/people.json -> 201
+    judge1 GET /password/pw_sc8c3GYUWN78iIyEJWv_UObYOfSC1va1 -> 200
+    judge1 POST /password/pw_sc8c3GYUWN78iIyEJWv_UObYOfSC1va1 -> 303
+     admin POST /e/evt_22f5445e/people.json -> 201
+    judge2 GET /password/pw_55TgEv42J4btgZwCC5dUGT98C8w_USev -> 200
+    judge2 POST /password/pw_55TgEv42J4btgZwCC5dUGT98C8w_USev -> 303
+     admin POST /e/evt_22f5445e/settings.json -> 200
 waiting 4 s for the deadline
-     team0 PATCH /e/evt_9f9d9af2/projects/prj_0284e470.json -> 409  deadline
-     admin POST /e/evt_9f9d9af2/state.json -> 200
-     admin POST /e/evt_9f9d9af2/state.json -> 200
-     admin POST /e/evt_9f9d9af2/assignment-runs.json -> 201
-    judge0 GET /e/evt_9f9d9af2/judge/batches.json -> 200
-    judge0 POST /e/evt_9f9d9af2/judge/assignments/prj_0284e470/scores.json -> 201
-    judge0 POST /e/evt_9f9d9af2/judge/assignments/prj_0284e470/finalize.json -> 200
-    judge0 POST /e/evt_9f9d9af2/judge/assignments/prj_28881ab4/scores.json -> 201
-    judge0 POST /e/evt_9f9d9af2/judge/assignments/prj_28881ab4/finalize.json -> 200
-    judge0 POST /e/evt_9f9d9af2/judge/assignments/prj_e8d3e7af/scores.json -> 201
-    judge0 POST /e/evt_9f9d9af2/judge/assignments/prj_e8d3e7af/finalize.json -> 200
-    judge0 GET /e/evt_9f9d9af2/judges/per_4a1ed8b853/scores.json -> 403  peer scores refused
-    judge0 GET /e/evt_9f9d9af2/judges/me/scores.csv -> 200
-    judge1 GET /e/evt_9f9d9af2/judge/batches.json -> 200
-    judge1 POST /e/evt_9f9d9af2/judge/assignments/prj_0284e470/scores.json -> 201
-    judge1 POST /e/evt_9f9d9af2/judge/assignments/prj_0284e470/finalize.json -> 200
-    judge1 POST /e/evt_9f9d9af2/judge/assignments/prj_28881ab4/scores.json -> 201
-    judge1 POST /e/evt_9f9d9af2/judge/assignments/prj_28881ab4/finalize.json -> 200
-    judge1 POST /e/evt_9f9d9af2/judge/assignments/prj_e8d3e7af/scores.json -> 201
-    judge1 POST /e/evt_9f9d9af2/judge/assignments/prj_e8d3e7af/finalize.json -> 200
-    judge1 GET /e/evt_9f9d9af2/judges/per_aa98ef404a/scores.json -> 403  peer scores refused
-    judge1 GET /e/evt_9f9d9af2/judges/me/scores.csv -> 200
-    judge2 GET /e/evt_9f9d9af2/judge/batches.json -> 200
-    judge2 POST /e/evt_9f9d9af2/judge/assignments/prj_0284e470/scores.json -> 201
-    judge2 POST /e/evt_9f9d9af2/judge/assignments/prj_0284e470/finalize.json -> 200
-    judge2 POST /e/evt_9f9d9af2/judge/assignments/prj_28881ab4/scores.json -> 201
-    judge2 POST /e/evt_9f9d9af2/judge/assignments/prj_28881ab4/finalize.json -> 200
-    judge2 POST /e/evt_9f9d9af2/judge/assignments/prj_e8d3e7af/scores.json -> 201
-    judge2 POST /e/evt_9f9d9af2/judge/assignments/prj_e8d3e7af/finalize.json -> 200
-    judge2 GET /e/evt_9f9d9af2/judges/per_c4db48b1b6/scores.json -> 403  peer scores refused
-    judge2 GET /e/evt_9f9d9af2/judges/me/scores.csv -> 200
-     admin GET /e/evt_9f9d9af2/progress.json -> 200
-     admin GET /e/evt_9f9d9af2/scores.csv -> 200
-   visitor GET /e/evt_9f9d9af2/results.json -> 403  hidden before publish
-     admin POST /e/evt_9f9d9af2/publish.json -> 200
-   visitor GET /e/evt_9f9d9af2/results.json -> 200
-    judge0 POST /e/evt_9f9d9af2/judge/assignments/prj_0284e470/finalize.json -> 409  frozen after publish
-lifecycle PASS: 78 requests, event evt_9f9d9af2, ranking_sha256 50b59b5d9f9066be65564180172dc7377ad1fadb96a44cae576a79b3be489e4a
+     team0 PATCH /e/evt_22f5445e/projects/prj_fc01ee09.json -> 409  deadline
+     admin POST /e/evt_22f5445e/state.json -> 200
+     admin POST /e/evt_22f5445e/state.json -> 200
+     admin POST /e/evt_22f5445e/assignment-runs.json -> 201
+    judge0 GET /e/evt_22f5445e/judge/batches.json -> 200
+    judge0 POST /e/evt_22f5445e/judge/assignments/prj_79a025f6/scores.json -> 201
+    judge0 POST /e/evt_22f5445e/judge/assignments/prj_79a025f6/finalize.json -> 200
+    judge0 POST /e/evt_22f5445e/judge/assignments/prj_87768873/scores.json -> 201
+    judge0 POST /e/evt_22f5445e/judge/assignments/prj_87768873/finalize.json -> 200
+    judge0 POST /e/evt_22f5445e/judge/assignments/prj_fc01ee09/scores.json -> 201
+    judge0 POST /e/evt_22f5445e/judge/assignments/prj_fc01ee09/finalize.json -> 200
+    judge0 GET /e/evt_22f5445e/judges/per_eff079554c/scores.json -> 403  peer scores refused
+    judge0 GET /e/evt_22f5445e/judges/me/scores.csv -> 200
+    judge1 GET /e/evt_22f5445e/judge/batches.json -> 200
+    judge1 POST /e/evt_22f5445e/judge/assignments/prj_79a025f6/scores.json -> 201
+    judge1 POST /e/evt_22f5445e/judge/assignments/prj_79a025f6/finalize.json -> 200
+    judge1 POST /e/evt_22f5445e/judge/assignments/prj_87768873/scores.json -> 201
+    judge1 POST /e/evt_22f5445e/judge/assignments/prj_87768873/finalize.json -> 200
+    judge1 POST /e/evt_22f5445e/judge/assignments/prj_fc01ee09/scores.json -> 201
+    judge1 POST /e/evt_22f5445e/judge/assignments/prj_fc01ee09/finalize.json -> 200
+    judge1 GET /e/evt_22f5445e/judges/per_9810c7e223/scores.json -> 403  peer scores refused
+    judge1 GET /e/evt_22f5445e/judges/me/scores.csv -> 200
+    judge2 GET /e/evt_22f5445e/judge/batches.json -> 200
+    judge2 POST /e/evt_22f5445e/judge/assignments/prj_79a025f6/scores.json -> 201
+    judge2 POST /e/evt_22f5445e/judge/assignments/prj_79a025f6/finalize.json -> 200
+    judge2 POST /e/evt_22f5445e/judge/assignments/prj_87768873/scores.json -> 201
+    judge2 POST /e/evt_22f5445e/judge/assignments/prj_87768873/finalize.json -> 200
+    judge2 POST /e/evt_22f5445e/judge/assignments/prj_fc01ee09/scores.json -> 201
+    judge2 POST /e/evt_22f5445e/judge/assignments/prj_fc01ee09/finalize.json -> 200
+    judge2 GET /e/evt_22f5445e/judges/per_df386285cb/scores.json -> 403  peer scores refused
+    judge2 GET /e/evt_22f5445e/judges/me/scores.csv -> 200
+     admin GET /e/evt_22f5445e/progress.json -> 200
+     admin GET /e/evt_22f5445e/scores.csv -> 200
+   visitor GET /e/evt_22f5445e/results.json -> 403  hidden before publish
+     admin POST /e/evt_22f5445e/publish.json -> 200
+   visitor GET /e/evt_22f5445e/results.json -> 200
+    judge0 POST /e/evt_22f5445e/judge/assignments/prj_fc01ee09/finalize.json -> 409  frozen after publish
+lifecycle PASS: 78 requests, event evt_22f5445e, ranking_sha256 7fcbafb6159fd35601d82ebe8933d174d7417382766870db2ffa85b97d65206a
