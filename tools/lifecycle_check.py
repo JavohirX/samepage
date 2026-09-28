@@ -35,6 +35,11 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 OPENER = urllib.request.build_opener(NoRedirect)
 
 
+def shown(path: str) -> str:
+    """The path as printed: a one-time link's secret is cut to its first characters."""
+    return re.sub(r"^/(password|join|accept)/([A-Za-z0-9_-]{6})[A-Za-z0-9_-]+", r"/\1/\2...", path)
+
+
 class Session:
     """Cookies by name, kept by hand (http.cookiejar is unreliable for a bare 'localhost')."""
 
@@ -69,7 +74,7 @@ class Session:
                 break
             # Sign-in, sign-up and set-password share a 10-a-minute throttle. Wait as told, then retry.
             wait = int(header_list.get("Retry-After") or 30)
-            print(f"{self.name:>10} {method} {path} -> 429, waiting {wait} s as Retry-After says")
+            print(f"{self.name:>10} {method} {shown(path)} -> 429, waiting {wait} s as Retry-After says")
             time.sleep(wait)
         for value in header_list.get_all("Set-Cookie") or []:
             key, _, rest = value.partition("=")
@@ -81,7 +86,7 @@ class Session:
         global STEPS
         got, headers, text = self.call(method, path, form=form, body=body)
         STEPS += 1
-        line = f"{self.name:>10} {method} {path} -> {got}"
+        line = f"{self.name:>10} {method} {shown(path)} -> {got}"
         if got != status:
             print(line + f"  EXPECTED {status}: {text[:400]}")
             sys.exit(1)
