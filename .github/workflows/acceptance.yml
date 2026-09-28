@@ -1,8 +1,10 @@
 # Proves the evaluation path: a cold 'docker compose up' on amd64 and arm64 passes the
 # official checker, the test suite passes inside the image, statsmodels re-derives the
-# ranking from the portal's scores.csv, a fresh volume gives the same tokens and the same
-# report, and production mode refuses the public demo credentials. Also runs the suite and
-# the checker natively, and a best-effort boot with the containers' internet cut off.
+# ranking from the portal's scores.csv, backup and restore round-trip, a fresh volume gives
+# the same tokens and the same report, and production mode refuses the public demo
+# credentials and then runs one event end to end. The receipts in the repository are the
+# files tools/verify.py writes here ('python tools/verify.py fetch' copies them). Also runs
+# the suite and the checker natively, and a best-effort boot with container egress cut off.
 name: acceptance
 
 on:
@@ -125,23 +127,20 @@ jobs:
           grep -o 'Bearer [A-Za-z0-9_]*' .dogfood.toml | while read -r _ token; do
             grep -qF "$token" boot.log || { echo "boot banner lacks $token"; exit 1; }
           done
-      - name: Official checker against the cold stack
+      - name: The checker, the tests in the container, the oracle, the checker again (tools/verify.py stack)
         run: |
-          python3 run.py .dogfood.toml > acceptance-report.txt
+          # The committed copies go first, so an upload can only ever hold what this run wrote.
+          rm -f acceptance-report.txt receipts/tests.txt receipts/oracle-statsmodels.txt receipts/backup-restore.txt
+          python3 tools/verify.py stack --tests docker --oracle docker
           cat acceptance-report.txt
           grep -Fxq "$VERDICT" acceptance-report.txt
           file acceptance-report.txt
-      - name: Test suite inside the container
-        run: docker compose --profile test run --rm test
-      - name: statsmodels re-derives the ranking (oracle image)
+          tail -n 3 receipts/tests.txt
+          cat receipts/oracle-statsmodels.txt
+      - name: Backup, a change, restore, and the change is gone (tools/verify.py backup)
         run: |
-          docker compose --profile oracle run --rm oracle > oracle-statsmodels.txt
-          cat oracle-statsmodels.txt
-          grep -q '^PASS' oracle-statsmodels.txt
-      - name: The checker still passes after the suite and the oracle
-        run: |
-          python3 run.py .dogfood.toml > acceptance-report-after-tests.txt
-          diff acceptance-report.txt acceptance-report-after-tests.txt
+          python3 tools/verify.py backup
+          cat receipts/backup-restore.txt
       - name: Production mode refuses to start with the demo defaults
         run: |
           set +e
@@ -172,7 +171,9 @@ jobs:
           name: acceptance-${{ matrix.arch }}
           path: |
             acceptance-report*.txt
-            oracle-statsmodels.txt
+            receipts/tests.txt
+            receipts/oracle-statsmodels.txt
+            receipts/backup-restore.txt
             production-refusal.txt
             boot.log
             compose.log
@@ -189,105 +190,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Real secrets for this run
+      # Refusal of a demo-seeded volume (samepage_app untouched), a fresh production boot that
+      # refuses every demo credential, manage.py samepage_admin then tools/lifecycle_check.py over
+      # HTTP, and liveness/readiness with the database stopped. Random secrets for this run.
+      - name: Production mode end to end (tools/verify.py production)
         run: |
-          {
-            echo "SECRET_KEY=$(openssl rand -hex 32)"
-            echo "DB_OWNER_PASSWORD=$(openssl rand -hex 16)"
-            echo "DB_APP_PASSWORD=$(openssl rand -hex 16)"
-          } >> "$GITHUB_ENV"
-      - name: Build
-        run: docker compose build
-      - name: A database seeded in demo mode is refused by production mode
-        run: |
-          SAMEPAGE_MODE=demo docker compose up -d --wait --wait-timeout 300
-          docker compose stop app
-          # SCRAM salts every ALTER ROLE ... PASSWORD, so any role change shows up as a new hash.
-          role_hash() {
-            docker compose exec -T db psql -U owner -d samepage -tAc \
-              "SELECT md5(rolpassword) FROM pg_authid WHERE rolname = 'samepage_app'"
-          }
-          before="$(role_hash)"
-          set +e
-          docker compose run --rm --no-deps -e SAMEPAGE_MODE=production -e ALLOWED_HOSTS=localhost app \
-            > production-refusal-demo-db.txt 2>&1
-          code=$?
-          set -e
-          cat production-refusal-demo-db.txt
-          test "$code" -ne 0
-          grep -q "demo bearer token" production-refusal-demo-db.txt
-          grep -q "demo password" production-refusal-demo-db.txt
-          after="$(role_hash)"
-          test -n "$before"
-          test "$before" = "$after"
-          echo "The refused boot left samepage_app and its password untouched."
-      - name: Production boots on a fresh database and refuses every demo credential
-        env:
-          SAMEPAGE_MODE: production
-          ALLOWED_HOSTS: localhost,127.0.0.1
-        run: |
-          docker compose down -v
-          docker compose up -d --wait --wait-timeout 300
-          base=http://localhost:8080
-          org="$(grep '^organizer' .dogfood.toml | cut -d'"' -f2)"
-          {
-            echo "production mode on a fresh volume"
-            docker compose logs --no-color app | grep -m1 "preflight passed"
-            printf 'GET /healthz -> %s\n' "$(curl -s -o /dev/null -w '%{http_code}' $base/healthz)"
-            printf 'GET / -> %s\n' "$(curl -s -o /dev/null -w '%{http_code}' $base/)"
-            printf 'GET /demo/enter/org -> %s\n' "$(curl -s -o /dev/null -w '%{http_code}' $base/demo/enter/org)"
-            printf 'GET /e/evt_01/scores.csv with the demo organizer token -> %s\n' \
-              "$(curl -s -o /dev/null -w '%{http_code}' -H "$org" $base/e/evt_01/scores.csv)"
-          } | tee production-mode.txt
-          grep -q "GET /healthz -> 200" production-mode.txt
-          grep -q "GET / -> 200" production-mode.txt
-          grep -q "GET /demo/enter/org -> 404" production-mode.txt
-          grep -q "demo organizer token -> 401" production-mode.txt
-      - name: An operator bootstraps production and runs one event end to end over HTTP
-        env:
-          SAMEPAGE_MODE: production
-          ALLOWED_HOSTS: localhost,127.0.0.1
-        run: |
-          # No seed and no demo credential: an admin made by the documented command, then only HTTP.
-          SAMEPAGE_ADMIN_PASSWORD="$(openssl rand -hex 16)"
-          export SAMEPAGE_ADMIN_PASSWORD
-          {
-            echo "production mode, fresh volume: manage.py samepage_admin, then tools/lifecycle_check.py"
-            docker compose exec -T -e SAMEPAGE_ADMIN_PASSWORD app python manage.py samepage_admin --email ops@example.org --name Ops
-            python3 tools/lifecycle_check.py --base http://localhost:8080 --admin-email ops@example.org
-          } 2>&1 | tee production-lifecycle.txt
-          grep -q "created admin" production-lifecycle.txt
-          grep -q "^lifecycle PASS" production-lifecycle.txt
-      - name: With the database stopped, liveness stays 200 and readiness is 503
-        env:
-          SAMEPAGE_MODE: production
-          ALLOWED_HOSTS: localhost,127.0.0.1
-        run: |
-          docker compose stop db
-          base=http://localhost:8080
-          {
-            echo "production mode, database container stopped"
-            printf 'GET /healthz -> %s\n' "$(curl -s -o /dev/null -m 30 -w '%{http_code}' $base/healthz)"
-            printf 'GET /readyz.json -> %s\n' "$(curl -s -o /dev/null -m 30 -w '%{http_code} %{content_type}' $base/readyz.json)"
-            printf 'GET /e/evt_01/projects.json -> %s\n' \
-              "$(curl -s -o /dev/null -m 30 -w '%{http_code} %{content_type}' $base/e/evt_01/projects.json)"
-          } | tee readiness-db-down.txt
-          grep -q "GET /healthz -> 200" readiness-db-down.txt
-          grep -q "GET /readyz.json -> 503 application/problem+json" readiness-db-down.txt
-          grep -q "GET /e/evt_01/projects.json -> 500 application/problem+json" readiness-db-down.txt
-      - name: Collect logs
-        if: always()
-        run: docker compose logs --no-color --timestamps > compose-production.log 2>&1 || true
+          rm -f receipts/production-*.txt receipts/readiness-db-down.txt
+          python3 tools/verify.py production
+          cat receipts/production-refusal-demo-db.txt receipts/production-mode.txt
+          cat receipts/production-lifecycle.txt receipts/readiness-db-down.txt
       - name: Upload receipts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: production-mode
           path: |
-            production-refusal-demo-db.txt
-            production-mode.txt
-            production-lifecycle.txt
-            readiness-db-down.txt
+            receipts/production-refusal-demo-db.txt
+            receipts/production-mode.txt
+            receipts/production-lifecycle.txt
+            receipts/readiness-db-down.txt
             compose-production.log
           if-no-files-found: warn
       - name: Tear down

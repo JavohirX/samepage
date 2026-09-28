@@ -12,6 +12,8 @@ backups/
 *.dump
 .env
 .env.*
+# Written by tools/verify.py production (uploaded by CI, never a receipt)
+compose-production.log
 
 # Planning notes (kept local)
 plan/
