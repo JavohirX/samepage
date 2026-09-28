@@ -19,6 +19,7 @@
     </div>
     <nav>
       {% if event_id %}
+      <a href="/e/{{ event_id }}">Event</a>
       <a href="/e/{{ event_id }}/projects">Gallery</a>
       <a href="/e/{{ event_id }}/results">Results</a>
       {% if is_judge %}<a href="/e/{{ event_id }}/judge/batches">Console</a>{% endif %}
@@ -28,10 +29,12 @@
       <a href="/e/{{ event_id }}/normalization">Lab</a>
       <a href="/e/{{ event_id }}/duplicates">Duplicates</a>
       <a href="/e/{{ event_id }}/audit">Audit</a>
+      <a href="/e/{{ event_id }}/settings">Manage</a>
       {% endif %}
       {% endif %}
       <a href="/about/access">Access</a>
       {% if me %}
+      <a href="/account">Account</a>
       <form method="post" action="/logout">{% csrf_token %}<button class="outline" type="submit">Sign out</button></form>
       {% else %}
       <a href="/login" role="button" class="outline">Sign in</a>

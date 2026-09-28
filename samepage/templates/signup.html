@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Create an account</h1>
+<form method="post" action="/signup">
+  {% csrf_token %}
+  <label>Name <input name="name" required maxlength="120" autocomplete="name"></label>
+  <label>Email <input type="email" name="email" required autocomplete="username"></label>
+  <label>Password (10 characters or more) <input type="password" name="password" required minlength="10" autocomplete="new-password"></label>
+  <input type="hidden" name="next" value="{{ next }}">
+  <button type="submit">Create account</button>
+</form>
+<p class="meta">Already have one? <a href="/login?next={{ next|urlencode }}">Sign in</a>. Judges and organizers get a set-password link from the event's organizer instead.</p>
+{% endblock %}

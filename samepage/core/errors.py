@@ -83,16 +83,43 @@ def _status_of(exc) -> int:
     return 500
 
 
+def _flat(value) -> str:
+    if isinstance(value, (list, tuple)):
+        return " ".join(_flat(item) for item in value)
+    if isinstance(value, dict):
+        return " ".join(f"{key}: {_flat(item)}" for key, item in value.items())
+    return str(value)
+
+
+def _errors_of(exc) -> dict[str, str] | None:
+    """Field errors as {field: message}, for the problem body's `errors` member and the HTML list."""
+    detail = getattr(exc, "detail", None)
+    if isinstance(detail, dict):
+        return {str(key): _flat(value) for key, value in detail.items()}
+    return None
+
+
 def _detail_of(exc) -> str:
     detail = getattr(exc, "detail", None)
     if detail is None:
         return "Something went wrong."
-    if isinstance(detail, (list, dict)):
-        return json.dumps(detail, default=str)
+    if isinstance(detail, dict):
+        # One readable sentence per field, e.g. "title: Title is required."
+        return " ".join(f"{key}: {_flat(value)}" for key, value in detail.items())
+    if isinstance(detail, list):
+        return _flat(detail)
     return str(detail)
 
 
-def problem_response(request, status: int, detail: str, *, fmt: str | None = None, public_cache: bool = False):
+def problem_response(
+    request,
+    status: int,
+    detail: str,
+    *,
+    fmt: str | None = None,
+    public_cache: bool = False,
+    errors: dict[str, str] | None = None,
+):
     chosen = negotiate(request, fmt if fmt is not None else getattr(request, "samepage_fmt", None))
     correlation = getattr(request, "correlation_id", "") or uuid.uuid4().hex[:16]
     title = TITLES.get(status, "Error")
@@ -112,8 +139,17 @@ def problem_response(request, status: int, detail: str, *, fmt: str | None = Non
         "detail": detail,
         "correlation_id": correlation,
     }
+    if errors:
+        body["errors"] = errors
     if chosen == "html":
-        response = render(request, "problem.html", {"problem": body, "page_title": title}, status=status)
+        back = request.META.get("HTTP_REFERER", "")
+        same_site = back.startswith(("http://", "https://")) and request.get_host() in back.split("/")[2:3]
+        response = render(
+            request,
+            "problem.html",
+            {"problem": body, "page_title": title, "back": back if same_site else ""},
+            status=status,
+        )
     else:
         response = HttpResponse(
             json.dumps(body),
@@ -168,7 +204,7 @@ def exception_handler(exc, context):
     else:
         detail = _detail_of(exc)
     # Returning HttpResponse skips DRF's renderer, which would turn a CSV 403 into a 500.
-    response = problem_response(request, status, detail, fmt=fmt)
+    response = problem_response(request, status, detail, fmt=fmt, errors=_errors_of(exc) if status < 500 else None)
     if isinstance(exc, Throttled) and exc.wait:
         response["Retry-After"] = str(int(exc.wait) + 1)
     return response

@@ -90,7 +90,9 @@ def _parse_database_url(url: str) -> dict:
 
 
 def _databases() -> dict:
-    url = os.environ.get("DATABASE_URL") or os.environ.get("DB_APP_URL")
+    # DB_OWNER_URL last: a one-off `docker compose exec app python manage.py ...` has only the owner URL.
+    # The served process always has DATABASE_URL (the entrypoint sets it to the runtime role).
+    url = os.environ.get("DATABASE_URL") or os.environ.get("DB_APP_URL") or os.environ.get("DB_OWNER_URL")
     if url:
         return {"default": _parse_database_url(url)}
     return {
@@ -144,6 +146,7 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.AllowAny"],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    "DEFAULT_CONTENT_NEGOTIATION_CLASS": "samepage.core.negotiation.ViewChoosesFormat",
     "URL_FORMAT_OVERRIDE": None,
     "EXCEPTION_HANDLER": "samepage.core.errors.exception_handler",
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",

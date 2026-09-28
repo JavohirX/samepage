@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page"><h1>New event</h1></header>
+<p class="meta">Times are UTC. The event starts as a draft; open it from its settings page when tracks and rubric are right. The same fields work as JSON on <code>POST /e.json</code>.</p>
+<form method="post" action="/e">
+  {% csrf_token %}
+  <label>Name <input name="name" required maxlength="200"></label>
+  <label>Description <textarea name="description" rows="3"></textarea></label>
+  <div class="grid">
+    <label>Submissions open (optional) <input type="datetime-local" name="starts_at"></label>
+    <label>Submissions close <input type="datetime-local" name="submissions_close" required></label>
+    <label>Judging ends (optional) <input type="datetime-local" name="judging_ends"></label>
+  </div>
+  <div class="grid">
+    <label>Tracks, one per line <textarea name="tracks" rows="4" required placeholder="Developer tools&#10;Climate"></textarea></label>
+    <label>Prize categories, one per line <textarea name="prizes" rows="4" placeholder="Grand prize&#10;Best newcomer"></textarea></label>
+  </div>
+  <label>Rubric: one criterion per line as <code>Name: weight</code> (blank means Functionality, Quality, Innovation at weight 1)
+    <textarea name="criteria" rows="3" placeholder="Functionality: 2&#10;Quality: 1&#10;Innovation: 1"></textarea></label>
+  <label>Custom questions for submissions, one per line: <code>Question</code>, or <code>Question: choice a, choice b</code>; end with <code>*</code> if required
+    <textarea name="custom_questions" rows="3" placeholder="Which license?: MIT, Apache-2.0*&#10;What did you learn?"></textarea></label>
+  <div class="grid">
+    <label>Largest team <input type="number" name="max_team_size" min="1" max="20" value="4"></label>
+    <label><input type="checkbox" name="blind_judging" value="true"> Blind judging (judges do not see team names)</label>
+  </div>
+  <button type="submit">Create event</button>
+</form>
+{% endblock %}

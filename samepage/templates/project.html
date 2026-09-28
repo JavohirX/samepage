@@ -3,22 +3,44 @@
 {% block main %}
 {% with item=payload.item %}
 <header class="page">
-  <p class="kicker"><data data-field="track_name" value="{{ item.track_name }}">{{ item.track_name }}</data> · <data data-field="id" value="{{ item.id }}">{{ item.id }}</data></p>
-  <h1><data data-field="title" value="{{ item.title }}">{{ item.title }}</data></h1>
-  <p><data data-field="tagline" value="{{ item.tagline }}">{{ item.tagline }}</data></p>
+  <div>
+    <p class="kicker"><data data-field="track_name" value="{{ item.track_name }}">{{ item.track_name }}</data> · <data data-field="id" value="{{ item.id }}">{{ item.id }}</data></p>
+    <h1><data data-field="title" value="{{ item.title }}">{{ item.title }}</data></h1>
+    <p><data data-field="tagline" value="{{ item.tagline }}">{{ item.tagline }}</data></p>
+  </div>
+  {% if item.thumbnail %}<img class="thumb" src="{{ item.thumbnail }}" alt="Thumbnail of {{ item.title }}">{% endif %}
 </header>
 {% if item.badge %}<p class="badge"><data data-field="badge" value="{{ item.badge }}">{{ item.badge }}</data></p>{% endif %}
+{% if item.state == "draft" %}<p class="banner">Draft: only the team and the organizers can see this until it is submitted.</p>{% endif %}
+{% if payload.can_edit %}
+<p class="tools">
+  <a href="/e/{{ event_id }}/projects/{{ item.id }}/edit" role="button">Edit</a>
+  {% if item.state == "draft" %}<form method="post" action="/e/{{ event_id }}/projects/{{ item.id }}/submit" class="inline">{% csrf_token %}<button type="submit">Submit</button></form>{% endif %}
+</p>
+{% endif %}
 <dl class="facts">
   <div><dt>State</dt><dd><data data-field="state" value="{{ item.state }}">{{ item.state }}</data></dd></div>
   {% if item.team_name %}<div><dt>Team</dt><dd><data data-field="team_name" value="{{ item.team_name }}">{{ item.team_name }}</data></dd></div>{% endif %}
   <div><dt>Track</dt><dd><data data-field="track" value="{{ item.track }}">{{ item.track }}</data></dd></div>
-  <div><dt>Submitted</dt><dd><data data-field="submitted_at" value="{{ item.submitted_at }}">{{ item.submitted_at }}</data> UTC</dd></div>
-  <div><dt>Repo</dt><dd><data data-field="repo_url" value="{{ item.repo_url }}">{{ item.repo_url }}</data></dd></div>
-  <div><dt>Live</dt><dd><data data-field="live_url" value="{{ item.live_url }}">{{ item.live_url }}</data></dd></div>
-  <div><dt>Video</dt><dd><data data-field="video_url" value="{{ item.video_url }}">{{ item.video_url }}</data></dd></div>
+  <div><dt>Submitted</dt><dd><data data-field="submitted_at" value="{{ item.submitted_at }}">{{ item.submitted_at|default:"not yet" }}</data></dd></div>
+  <div><dt>Repo</dt><dd>{% if item.repo_url %}<a href="{{ item.repo_url }}" rel="nofollow noopener"><data data-field="repo_url" value="{{ item.repo_url }}">{{ item.repo_url }}</data></a>{% endif %}</dd></div>
+  <div><dt>Live</dt><dd>{% if item.live_url %}<a href="{{ item.live_url }}" rel="nofollow noopener"><data data-field="live_url" value="{{ item.live_url }}">{{ item.live_url }}</data></a>{% endif %}</dd></div>
+  <div><dt>Video</dt><dd>{% if item.video_url %}<a href="{{ item.video_url }}" rel="nofollow noopener"><data data-field="video_url" value="{{ item.video_url }}">{{ item.video_url }}</data></a>{% endif %}</dd></div>
   <div><dt>Tags</dt><dd><data data-field="tech_tags" value="{{ item.tech_tags }}">{{ item.tech_tags }}</data></dd></div>
-  <div><dt>Description</dt><dd><data data-field="description" value="{{ item.description }}">{{ item.description }}</data></dd></div>
 </dl>
+<h2>Description</h2>
+<p><data data-field="description" value="{{ item.description }}">{{ item.description|linebreaksbr }}</data></p>
+{% if payload.answers %}
+<h2>Answers</h2>
+<dl class="facts">{% for a in payload.answers %}<div><dt>{{ a.label }}</dt><dd>{{ a.answer|default:"—" }}</dd></div>{% endfor %}</dl>
+{% endif %}
+{% if payload.media %}
+<h2>Gallery</h2>
+<div class="cards">{% for m in payload.media %}{% if m.kind == "gallery" %}<img src="{{ m.url }}" alt="Screenshot of {{ item.title }}" loading="lazy">{% endif %}{% endfor %}</div>
+{% endif %}
+{% if payload.can_withdraw %}
+<form method="post" action="/e/{{ event_id }}/projects/{{ item.id }}/withdraw">{% csrf_token %}<button class="secondary outline" type="submit">Withdraw this submission</button></form>
+{% endif %}
 <p class="tools"><a href="{{ payload.download_json }}">JSON</a></p>
 {% endwith %}
 {% endblock %}

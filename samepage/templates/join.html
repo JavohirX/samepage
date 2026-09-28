@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Join {{ payload.team_name }}</h1>
+<p>A team in <strong>{{ payload.event_name }}</strong> ({{ payload.members }} of {{ payload.max_team_size }} places taken). The link expires {{ payload.expires_at }} UTC.</p>
+{% if me %}
+<form method="post" action="{{ payload.path }}">{% csrf_token %}<button type="submit">Join as {{ me.email }}</button></form>
+{% else %}
+<p><a href="/signup?next={{ payload.path|urlencode }}" role="button">Create an account</a> <a href="/login?next={{ payload.path|urlencode }}" role="button" class="outline">Sign in</a></p>
+<p class="meta">Then come back to this link.</p>
+{% endif %}
+{% endblock %}

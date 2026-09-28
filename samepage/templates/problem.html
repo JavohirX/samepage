@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block main %}
 <h1>{{ problem.title }}</h1>
+{% if problem.errors %}
+<p>Please fix these and try again:</p>
+<ul class="banner">
+  {% for field, message in problem.errors.items %}<li><strong>{{ field }}</strong>: {{ message }}</li>{% endfor %}
+</ul>
+{% else %}
 <p>{{ problem.detail }}</p>
+{% endif %}
+{% if back %}<p><a href="{{ back }}">Go back</a></p>{% endif %}
 <p class="meta">Reference {{ problem.correlation_id }}</p>
 {% endblock %}

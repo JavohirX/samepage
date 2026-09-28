@@ -1,16 +1,55 @@
 {% extends "base.html" %}
 {% block main %}
 <header class="page">
-  <h1>{{ payload.name }}</h1>
-  <p>State {{ payload.state }} · submissions close {{ payload.submissions_close }} UTC</p>
+  <div>
+    <p class="kicker">{{ payload.id }} · {{ payload.state }}</p>
+    <h1>{{ payload.name }}</h1>
+  </div>
+  <p class="tools"><a href="{{ payload.download_json }}">JSON</a></p>
 </header>
+{% if payload.description %}<p>{{ payload.description|linebreaksbr }}</p>{% endif %}
+<dl class="facts">
+  <div><dt>Submissions open</dt><dd>{{ payload.starts_at|default:"when the event opens" }}</dd></div>
+  <div><dt>Submissions close (UTC)</dt><dd><data data-field="submissions_close" value="{{ payload.submissions_close }}">{{ payload.submissions_close }}</data></dd></div>
+  <div><dt>Judging ends</dt><dd>{{ payload.judging_ends|default:"not set" }}</dd></div>
+  <div><dt>Accepting submissions</dt><dd><data data-field="submissions_open" value="{{ payload.submissions_open }}">{{ payload.submissions_open }}</data></dd></div>
+  <div><dt>Team size</dt><dd>up to {{ payload.max_team_size }}</dd></div>
+  <div><dt>Blind judging</dt><dd>{{ payload.blind_judging }}</dd></div>
+</dl>
+<div class="grid">
+  <section>
+    <h2>Tracks</h2>
+    <ul>{% for track in payload.tracks %}<li>{{ track.name }} <span class="id">{{ track.id }}</span></li>{% empty %}<li>None yet.</li>{% endfor %}</ul>
+  </section>
+  <section>
+    <h2>Prizes</h2>
+    <ul>{% for prize in payload.prizes %}<li>{{ prize.name }}</li>{% empty %}<li>None listed.</li>{% endfor %}</ul>
+  </section>
+  <section>
+    <h2>Rubric</h2>
+    <ul>{% for c in payload.criteria %}<li>{{ c.label }} × {{ c.weight }}{% if c.track_overrides %} <span class="meta">(some tracks differ)</span>{% endif %}</li>{% endfor %}</ul>
+    <p class="meta"><a href="/e/{{ payload.id }}/criteria">Rubric as a table</a></p>
+  </section>
+</div>
+<h2>You</h2>
 <ul>
-  <li><a href="/e/{{ event_id }}/projects">Gallery</a></li>
-  <li><a href="/e/{{ event_id }}/results">Results</a></li>
-  {% if is_staff %}
-  <li><a href="/e/{{ event_id }}/progress">Progress</a></li>
-  <li><a href="/e/{{ event_id }}/normalization">Normalization lab</a></li>
-  <li><a href="/e/{{ event_id }}/duplicates">Duplicates</a></li>
+  <li><a href="/e/{{ payload.id }}/projects">Gallery</a> · <a href="/e/{{ payload.id }}/results">Results</a></li>
+  {% if payload.your_team %}
+  <li>Your team: <a href="/e/{{ payload.id }}/teams/{{ payload.your_team.id }}">{{ payload.your_team.name }}</a></li>
+  {% elif me and not payload.can_manage and not is_judge %}
+    {% if payload.submissions_open == "true" or payload.state == "draft" %}
+  <li>
+    <form method="post" action="/e/{{ payload.id }}/teams" class="inline">{% csrf_token %}
+      <input name="name" placeholder="Team name" required maxlength="80" aria-label="Team name">
+      <button type="submit">Start a team</button>
+    </form>
+    <span class="meta">Or open an invite link from a team.</span>
+  </li>
+    {% endif %}
+  {% elif not me %}
+  <li><a href="/signup?next=/e/{{ payload.id }}">Create an account</a> or <a href="/login?next=/e/{{ payload.id }}">sign in</a> to join a team.</li>
   {% endif %}
+  {% if is_judge %}<li><a href="/e/{{ payload.id }}/judge/batches">Your judging console</a></li>{% endif %}
+  {% if payload.can_manage %}<li><a href="/e/{{ payload.id }}/settings">Manage this event</a> · <a href="/e/{{ payload.id }}/progress">Progress</a></li>{% endif %}
 </ul>
 {% endblock %}

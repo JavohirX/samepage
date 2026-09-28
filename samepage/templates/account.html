@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page"><h1>Your account</h1><p class="tools"><a href="/account.json">JSON</a></p></header>
+<p>{{ payload.name }} · {{ payload.email }}{% if payload.is_admin == "true" %} · global admin (<a href="/e/new">create an event</a>){% endif %}</p>
+<h2>Your events</h2>
+<ul>
+  {% for item in items %}
+  <li><a href="/e/{{ item.event_id }}">{{ item.event }}</a>: {{ item.role }}{% if item.team_id %} · <a href="/e/{{ item.event_id }}/teams/{{ item.team_id }}">your team</a>{% endif %}</li>
+  {% empty %}
+  <li>No roles yet. Open an event and start a team, or use an invite link.</li>
+  {% endfor %}
+</ul>
+<h2>Change password</h2>
+<form method="post" action="/account">
+  {% csrf_token %}
+  <label>Current password <input type="password" name="current_password" required autocomplete="current-password"></label>
+  <label>New password (10 characters or more) <input type="password" name="password" required minlength="10" autocomplete="new-password"></label>
+  <button type="submit">Change password</button>
+</form>
+{% endblock %}

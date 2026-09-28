@@ -37,7 +37,7 @@ body { color: var(--ink); background: var(--paper); }
 .sentence a { font-variant-numeric: tabular-nums; }
 .recount { border-top: 1px solid var(--line); padding-top: 0.6rem; color: #57534e; }
 .banner { background: #fff7ed; border-left: 3px solid var(--copper); padding: 0.6rem 0.8rem; }
-.filters { display: grid; grid-template-columns: 1fr auto auto; gap: 0.6rem; align-items: center; }
+.filters { display: grid; grid-template-columns: 1fr auto auto auto; gap: 0.6rem; align-items: center; }
 .filters button, .filters input, .filters select { margin: 0; }
 .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.6rem 1rem; }
 .facts div { margin: 0; }
@@ -50,3 +50,9 @@ table { font-variant-numeric: tabular-nums; }
   .hero h1 { font-size: 1.8rem; }
   .sentence { font-size: 1.1rem; }
 }
+form.inline, label.inline { display: inline-flex; gap: 0.5rem; align-items: center; margin: 0 0.5rem 0.5rem 0; }
+form.inline input, form.inline button, label.inline input { margin: 0; width: auto; }
+.thumb { max-width: 12rem; max-height: 8rem; border-radius: 0.4rem; border: 1px solid var(--line); }
+.cards img { max-width: 100%; border-radius: 0.3rem; }
+tr.behind td { background: #fff7ed; }
+.filters details { margin: 0; }

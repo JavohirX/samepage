@@ -9,6 +9,7 @@
   <input type="hidden" name="next" value="{{ request.GET.next|default:'/' }}">
   <button type="submit">Sign in</button>
 </form>
+<p class="meta">No account? <a href="/signup{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Create one</a>.</p>
 {% if demo_mode %}
 <p class="meta">Demo password is <code>samepage-demo</code>. Organizer is organizer@example.org. Or use the demo links above.</p>
 {% endif %}

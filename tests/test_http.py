@@ -146,3 +146,25 @@ def test_health_and_readiness_run_outside_the_request_transaction():
     for path in ("/healthz", "/healthz.json", "/readyz", "/readyz.json"):
         assert "default" in getattr(resolve(path).func, "_non_atomic_requests", set())
     assert "default" not in getattr(resolve("/e/evt_01/progress.json").func, "_non_atomic_requests", set())
+
+
+@pytest.mark.parametrize("accept", ["text/html", "text/csv", "application/xml"])
+def test_an_exact_accept_header_is_never_a_406(client, accept):
+    # DRF only knows its JSON renderer; the view picks the format, so no Accept value is refused.
+    response = client.get("/login", HTTP_ACCEPT=accept)
+    assert response.status_code == 401
+    assert client.get("/e/evt_01/projects", HTTP_ACCEPT=accept).status_code == 200
+
+
+def test_the_home_page_takes_no_post_but_e_creates_events(client, bearer):
+    assert client.post("/", {}, content_type="application/json", **bearer("admin")).status_code == 405
+
+
+def test_a_one_off_manage_command_falls_back_to_the_owner_url(monkeypatch):
+    from samepage import settings as config
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("DB_APP_URL", raising=False)
+    monkeypatch.setenv("DB_OWNER_URL", "postgres://owner:secret@db:5432/samepage")
+    database = config._databases()["default"]
+    assert (database["USER"], database["HOST"], database["NAME"]) == ("owner", "db", "samepage")

@@ -15,6 +15,8 @@ class SamepageView(APIView):
     permission_classes = [AllowAny]
     formats = ("html", "json", "csv")
     action = None
+    # The action a POST, PATCH or DELETE needs, when it differs from what reading the URL needs.
+    write_action = None
     html_omitted: dict[str, str] = {}
     public_cache = False
 
@@ -28,10 +30,13 @@ class SamepageView(APIView):
         super().initial(request, *args, **kwargs)
         user = request.user
         request.principal = user if getattr(user, "is_authenticated", False) else None
-        if self.action:
+        action = self.action
+        if request.method not in ("GET", "HEAD", "OPTIONS") and self.write_action:
+            action = self.write_action
+        if action:
             require(
                 request.principal,
-                self.action,
+                action,
                 event_id=kwargs.get("evt"),
                 target=kwargs.get("jdg"),
             )

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page"><h1>{{ payload.title }}</h1><p class="meta">Deadline {{ payload.closes }} UTC</p></header>
+{% if not payload.open %}
+<p class="banner">Submissions are closed or the event is not open, so saving will be refused.</p>
+{% endif %}
+{% with v=payload.values %}
+<form method="post" action="{% if payload.project_id %}/e/{{ event_id }}/projects/{{ payload.project_id }}{% else %}/e/{{ event_id }}/projects{% endif %}">
+  {% csrf_token %}
+  <label>Project name <input name="title" required maxlength="200" value="{{ v.title }}"></label>
+  <label>Tagline <input name="tagline" maxlength="300" value="{{ v.tagline }}"></label>
+  <label>Description <textarea name="description" rows="6">{{ v.description }}</textarea></label>
+  <div class="grid">
+    <label>Source repository URL <input type="url" name="repo_url" value="{{ v.repo_url }}" placeholder="https://"></label>
+    <label>Live deployment URL <input type="url" name="live_url" value="{{ v.live_url }}" placeholder="https://"></label>
+    <label>Demo video URL <input type="url" name="video_url" value="{{ v.video_url }}" placeholder="https://"></label>
+  </div>
+  <div class="grid">
+    <label>Tech stack tags (space separated, lowercase) <input name="tech_tags" value="{{ v.tech_tags }}" placeholder="python django postgres"></label>
+    <label>Track
+      <select name="track">
+        {% for t in payload.tracks %}<option value="{{ t.id }}" {% if v.track == t.id %}selected{% endif %}>{{ t.name }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+  {% for q in payload.questions %}
+  <label>{{ q.label }}{% if q.required %} (required to submit){% endif %}
+    {% if q.kind == "choice" %}
+    <select name="q_{{ q.key }}"><option value=""></option>{% for c in q.choices %}<option value="{{ c }}" {% if q.value == c %}selected{% endif %}>{{ c }}</option>{% endfor %}</select>
+    {% else %}
+    <textarea name="q_{{ q.key }}" rows="2">{{ q.value }}</textarea>
+    {% endif %}
+  </label>
+  {% endfor %}
+  {% if not payload.project_id %}
+  <label><input type="checkbox" name="submit" value="true"> Submit now (otherwise it stays a draft only your team and the organizers can see)</label>
+  {% endif %}
+  <button type="submit">{% if payload.project_id %}Save changes{% else %}Save{% endif %}</button>
+</form>
+{% endwith %}
+{% if payload.project_id %}
+<h2>Images</h2>
+<p class="meta">PNG, JPEG, GIF or WebP, at most 2 MB each: one thumbnail and up to 6 gallery images.</p>
+<div class="cards">
+  {% for m in payload.media %}
+  <figure class="card">
+    <img src="{{ m.url }}" alt="{{ m.kind }} image" loading="lazy">
+    <figcaption>{{ m.kind }}
+      <form method="post" action="{{ m.url }}/delete" class="inline">{% csrf_token %}<button class="outline secondary" type="submit">Remove</button></form>
+    </figcaption>
+  </figure>
+  {% endfor %}
+</div>
+<form method="post" action="/e/{{ event_id }}/projects/{{ payload.project_id }}/media" enctype="multipart/form-data">
+  {% csrf_token %}
+  <div class="grid">
+    <label>Image <input type="file" name="file" accept="image/png,image/jpeg,image/gif,image/webp" required></label>
+    <label>As <select name="kind"><option value="gallery">gallery image</option><option value="thumbnail">thumbnail</option></select></label>
+  </div>
+  <button type="submit">Upload</button>
+</form>
+<p><a href="/e/{{ event_id }}/projects/{{ payload.project_id }}">Back to the project</a></p>
+{% endif %}
+{% endblock %}

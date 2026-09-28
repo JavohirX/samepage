@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+<header class="page">
+  <div>
+    <p class="kicker">{{ payload.id }} · state <data data-field="state" value="{{ payload.state }}">{{ payload.state }}</data></p>
+    <h1>Manage {{ payload.name }}</h1>
+  </div>
+  <p class="tools"><a href="/e/{{ payload.id }}">Event page</a> <a href="/e/{{ payload.id }}/progress">Progress</a> <a href="/e/{{ payload.id }}/teams">Teams</a> <a href="/e/{{ payload.id }}/assignments">Assignments</a></p>
+</header>
+
+<section id="state">
+  <h2>State</h2>
+  <p>draft → open → closed → judging → published → archived. Teams and submissions need <strong>open</strong> and a deadline in the future; publishing happens on the <a href="/e/{{ payload.id }}/results">results page</a>.</p>
+  {% for state in payload.next_states %}
+  <form method="post" action="/e/{{ payload.id }}/state" class="inline">{% csrf_token %}<input type="hidden" name="state" value="{{ state }}"><button type="submit">Move to {{ state }}</button></form>
+  {% empty %}
+  <p class="meta">No further state from here.</p>
+  {% endfor %}
+</section>
+
+<section id="settings">
+  <h2>Settings</h2>
+  <form method="post" action="/e/{{ payload.id }}/settings">
+    {% csrf_token %}
+    <input type="hidden" name="form" value="settings">
+    <label>Name <input name="name" required maxlength="200" value="{{ payload.name }}"></label>
+    <label>Description <textarea name="description" rows="3">{{ payload.description }}</textarea></label>
+    <div class="grid">
+      <label>Submissions open (UTC) <input type="datetime-local" name="starts_at" value="{{ payload.starts_at|slice:':16' }}"></label>
+      <label>Submissions close (UTC) <input type="datetime-local" name="submissions_close" required value="{{ payload.submissions_close|slice:':16' }}"></label>
+      <label>Judging ends (UTC) <input type="datetime-local" name="judging_ends" value="{{ payload.judging_ends|slice:':16' }}"></label>
+    </div>
+    <div class="grid">
+      <label>Largest team <input type="number" name="max_team_size" min="1" max="20" value="{{ payload.max_team_size }}"></label>
+      <label><input type="checkbox" name="blind_judging" value="true" {% if payload.blind_judging == "true" %}checked{% endif %}> Blind judging</label>
+    </div>
+    <label>Custom questions, one per line (<code>Question</code>, or <code>Question: a, b</code>; <code>*</code> at the end if required)
+      <textarea name="custom_questions" rows="3">{{ payload.questions_text }}</textarea></label>
+    <div class="grid">
+      <label>Add tracks, one per line <textarea name="add_tracks" rows="2"></textarea></label>
+      <label>Add prize categories, one per line <textarea name="add_prizes" rows="2"></textarea></label>
+    </div>
+    <button type="submit">Save settings</button>
+  </form>
+  <p class="meta">Tracks: {% for t in payload.tracks %}{{ t.name }} <span class="id">{{ t.id }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}. Prizes: {% for p in payload.prizes %}{{ p.name }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}.</p>
+</section>
+
+<section id="rubric">
+  <h2>Rubric weights</h2>
+  <p class="meta">A review's score is Σ weight × score / Σ weight. A track row overrides the event weight for that track; leave it blank to inherit. Criteria are fixed once the first score exists; weights can change until publish, and the results refit on the next read.</p>
+  <form method="post" action="/e/{{ payload.id }}/criteria">
+    {% csrf_token %}
+    <div class="overflow-auto">
+    <table>
+      <thead><tr><th></th>{% for c in payload.criteria %}<th>{{ c.label }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        <tr><td>Event</td>{% for c in payload.criteria %}<td><input name="weight_{{ c.key }}" value="{{ c.weight }}" inputmode="decimal" aria-label="{{ c.key }} weight"><input type="hidden" name="label_{{ c.key }}" value="{{ c.label }}"></td>{% endfor %}</tr>
+        {% for t in payload.tracks %}
+        <tr><td>{{ t.name }}</td>{% for c in payload.criteria %}<td><input name="weight_{{ t.id }}_{{ c.key }}" value="{{ c.track_overrides|get_item:t.id }}" inputmode="decimal" placeholder="{{ c.weight }}" aria-label="{{ t.name }} {{ c.key }} weight"></td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <button type="submit">Save weights</button>
+  </form>
+</section>
+
+<section id="people">
+  <h2>Judges and organizers</h2>
+  <div class="overflow-auto">
+  <table>
+    <thead><tr><th>Person</th><th>Role</th><th>Tracks</th><th>Assigned</th><th>Done</th><th>Can sign in</th><th></th></tr></thead>
+    <tbody>
+    {% for p in payload.people %}{% if p.role != "participant" %}
+    <tr>
+      <td>{{ p.name }} <span class="id">{{ p.email }}</span></td><td>{{ p.role }}</td><td>{{ p.tracks }}</td><td>{{ p.assigned }}</td><td>{{ p.finalized }}</td><td>{{ p.can_sign_in }}</td>
+      <td>{% if p.can_sign_in == "false" %}<form method="post" action="/e/{{ payload.id }}/people/{{ p.person_id }}/password-link">{% csrf_token %}<button class="outline" type="submit">New password link</button></form>{% endif %}</td>
+    </tr>
+    {% endif %}{% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <h3>Invite a judge or organizer</h3>
+  <form method="post" action="/e/{{ payload.id }}/people">
+    {% csrf_token %}
+    <div class="grid">
+      <label>Email <input type="email" name="email" required></label>
+      <label>Name <input name="name" maxlength="120"></label>
+      <label>Role <select name="role"><option value="judge">judge</option><option value="organizer">organizer</option></select></label>
+    </div>
+    <fieldset>
+      <legend>Judges score these tracks (none ticked means all)</legend>
+      {% for t in payload.tracks %}<label class="inline"><input type="checkbox" name="tracks" value="{{ t.id }}"> {{ t.name }}</label>{% endfor %}
+    </fieldset>
+    <button type="submit">Add</button>
+  </form>
+  <p class="meta">A new person gets a one-time link to choose a password (shown once, on the next page). Nothing is emailed; this portal runs offline. Participants join through their team's invite link.</p>
+</section>
+{% endblock %}

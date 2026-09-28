@@ -155,7 +155,10 @@ def test_open_event_accepts_a_submission_on_its_own_track(client, bearer):
 
 def test_csv_neutralises_formulas_in_participant_text(client, bearer):
     client.post(
-        "/e/evt_02/projects.json", {"title": "=HYPERLINK(\"http://x\")"}, content_type="application/json", **bearer("control")
+        "/e/evt_02/projects.json",
+        {"title": "=HYPERLINK(\"http://x\")", "submit": True},
+        content_type="application/json",
+        **bearer("control"),
     )
     body = client.get("/e/evt_02/projects.csv").content.decode("utf-8")
     rows = list(csv.DictReader(io.StringIO(body)))

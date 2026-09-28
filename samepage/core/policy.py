@@ -21,12 +21,21 @@ ACTION_POLICY = {
     "gallery.read": EVERYONE,
     "project.read": EVERYONE,
     "about.read": EVERYONE,
-    "submission.create": {PARTICIPANT, ORGANIZER, ADMIN},
-    "submission.update": {PARTICIPANT, ORGANIZER, ADMIN},
+    "account.manage": EVERYONE,
+    "event.create": {ADMIN},
+    "event.manage": STAFF,
+    "people.read": STAFF,
+    "team.create": {VISITOR, PARTICIPANT},
+    "team.read": {PARTICIPANT, ORGANIZER, ADMIN},
+    "team.manage": {PARTICIPANT, ORGANIZER, ADMIN},
+    "invite.accept": {VISITOR, PARTICIPANT},
+    "submission.create": {PARTICIPANT},
+    "submission.update": {PARTICIPANT},
     "submission.withdraw": {PARTICIPANT, ORGANIZER, ADMIN},
     "scores.read_own": {JUDGE},
     "scores.read_named": JUDGES,
     "scores.read_ledger": STAFF,
+    "score.unlock": STAFF,
     "progress.read": STAFF,
     "results.read": STAFF,
     "normalization.read": STAFF,
@@ -35,12 +44,14 @@ ACTION_POLICY = {
     "duplicates.resolve": STAFF,
     "assignment.read": STAFF,
     "assignment.run": STAFF,
-    "event.manage": STAFF,
     "judge.console": {JUDGE},
     "judge.score": {JUDGE},
     "publish": STAFF,
-    "invite.accept": {PARTICIPANT, JUDGE, ORGANIZER, ADMIN},
 }
+
+# These need a signed-in person even where the role column says visitor: a visitor who is
+# signed in may start or join a team, an anonymous one is asked to sign in (401).
+SIGNED_IN = {"account.manage", "team.create", "invite.accept"}
 
 # Role × field → hidden. Blind mode adds team identity for judges at runtime.
 FIELD_POLICY = {
@@ -58,8 +69,17 @@ FIELD_POLICY = {
 BLIND_FIELDS = {"team_name", "team_id"}
 
 
-def allows(roles: set[str], action: str, *, target_is_self: bool = False, published: bool = False) -> bool:
+def allows(
+    roles: set[str],
+    action: str,
+    *,
+    target_is_self: bool = False,
+    published: bool = False,
+    signed_in: bool = True,
+) -> bool:
     roles = set(roles or {VISITOR})
+    if action in SIGNED_IN and not signed_in:
+        return False
     if action == "results.read" and published:
         return True
     if action == "scores.read_named":
@@ -113,15 +133,24 @@ def describe() -> list[dict]:
 
 
 _NOTES = {
-    "gallery.read": "Public. No login, no redirect.",
-    "project.read": "Submitted projects are public. Drafts stay with the team, organizers and assigned judges.",
+    "gallery.read": "Public. No login, no redirect. Drafts are not listed.",
+    "project.read": "Submitted projects are public. A draft is visible to its team and to organizers only.",
+    "account.manage": "Your own password. Signed in only.",
+    "event.create": "Global admins create events and become the event's first organizer.",
+    "event.manage": "Settings, dates, tracks, prizes, custom questions, rubric weights, state, judges and organizers.",
+    "people.read": "Who holds which role on the event, with each judge's tracks and progress.",
+    "team.create": "A signed-in person who is not a judge or organizer on the event, before the deadline.",
+    "team.read": "The team page: members of that team and organizers. Other participants get 403.",
+    "team.manage": "Invite links (create, revoke) for members of that team; removing a member is organizers only.",
+    "invite.accept": "A signed-in person with the secret link joins the team. Judges and organizers of the event cannot.",
     "scores.read_own": "A judge reads their own rows. A participant is refused before 'me' is resolved.",
     "scores.read_named": "A judge may open only their own id. Anyone else who is not staff is refused before the id is loaded, so the answer is 403 rather than 404.",
-    "scores.read_ledger": "The full ledger, including excluded duplicate rows.",
-    "results.read": "Staff before publish. Everyone after publish.",
-    "submission.create": "Refused with 409 once the event's close instant has passed. The body is not validated first.",
-    "submission.update": "Policy row only. No route edits a submission in this build.",
-    "submission.withdraw": "Policy row only. No route withdraws a submission in this build.",
-    "event.manage": "Policy row only. No route creates or edits an event in this build.",
-    "invite.accept": "Policy row only. No invite route exists in this build.",
+    "scores.read_ledger": "The full ledger, including excluded duplicate rows and drafts (counted=false).",
+    "score.unlock": "An organizer reopens a finalized score. Audited; refused after publish.",
+    "results.read": "Staff before publish. Everyone after publish, and then it is the frozen published snapshot.",
+    "submission.create": "Team members only. Refused with 409 once the event's close instant has passed. The body is not validated first.",
+    "submission.update": "Team members only, until the close instant (the service and a database trigger both refuse later edits).",
+    "submission.withdraw": "Team members or organizers.",
+    "judge.score": "Only on the judge's own assignments. Refused after publish.",
+    "assignment.run": "Dry run, initial issue, top-up and one-by-one assignment. Refused after publish.",
 }

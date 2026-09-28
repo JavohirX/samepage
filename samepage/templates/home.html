@@ -7,13 +7,18 @@
   <p>Each list page is also a CSV file and a JSON file. All three come from the same rows, through the same policy check. A statsmodels container re-derives the ranking from the scores.csv an organizer downloads.</p>
 </section>
 <section>
-  <h2>Events</h2>
+  <header class="page"><h2>Events</h2>{% if payload.can_create_event %}<a href="/e/new" role="button">New event</a>{% endif %}</header>
   <ul class="events">
     {% for item in items %}
-    <li><a href="/e/{{ item.id }}/projects"><data data-field="name" value="{{ item.name }}">{{ item.name }}</data></a> <data data-field="state" value="{{ item.state }}">{{ item.state }}</data></li>
+    <li><a href="/e/{{ item.id }}"><data data-field="name" value="{{ item.name }}">{{ item.name }}</data></a>
+      <data data-field="state" value="{{ item.state }}">{{ item.state }}</data>
+      · <a href="/e/{{ item.id }}/projects">gallery</a>
+      {% if item.your_roles %}<span class="meta">· you: {{ item.your_roles }}</span>{% endif %}
+    </li>
     {% empty %}
     <li>No events yet.</li>
     {% endfor %}
   </ul>
+  {% if not me %}<p class="meta"><a href="/signup">Create an account</a> to join a team, or <a href="/login">sign in</a>.</p>{% endif %}
 </section>
 {% endblock %}

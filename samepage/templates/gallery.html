@@ -3,18 +3,24 @@
 {% block main %}
 <header class="page">
   <h1>Gallery</h1>
-  <p class="tools"><a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a></p>
+  <p class="tools">
+    {% if payload.your_team and payload.submissions_open %}<a href="/e/{{ event_id }}/teams/{{ payload.your_team }}">Your team</a>{% endif %}
+    <a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a>
+  </p>
 </header>
 <form class="filters" method="get">
-  <input type="search" name="q" value="{{ payload.filters.q }}" placeholder="Search titles" aria-label="Search">
-  <select name="track" aria-label="Track">
-    <option value="">All tracks</option>
-    {% for track in payload.tracks %}
-    <option value="{{ track.id }}" {% if payload.filters.track == track.id %}selected{% endif %}>{{ track.name }}</option>
-    {% endfor %}
-  </select>
+  <input type="search" name="q" value="{{ payload.filters.q }}" placeholder="Search names, taglines, descriptions and tags" aria-label="Search">
+  <details class="dropdown">
+    <summary>Tracks</summary>
+    <ul>{% for track in payload.tracks %}<li><label><input type="checkbox" name="track" value="{{ track.id }}" {% if track.checked %}checked{% endif %}> {{ track.name }}</label></li>{% endfor %}</ul>
+  </details>
+  <details class="dropdown">
+    <summary>Tags</summary>
+    <ul>{% for tag in payload.tags %}<li><label><input type="checkbox" name="tag" value="{{ tag.name }}" {% if tag.checked %}checked{% endif %}> {{ tag.name }}</label></li>{% empty %}<li>No tags yet.</li>{% endfor %}</ul>
+  </details>
   <button type="submit">Filter</button>
 </form>
+<p class="meta">Any ticked track; every ticked tag. The same filters work on the .json and .csv links.</p>
 <p class="count"><data data-field="count" value="{{ payload.count }}">{{ payload.count }}</data> projects</p>
 <div class="cards">
   {% for item in items %}
@@ -27,6 +33,7 @@
       · <data data-field="state" value="{{ item.state }}">{{ item.state }}</data>
       · <data data-field="n_reviews" value="{{ item.n_reviews }}">{{ item.n_reviews }}</data> reviews
     </p>
+    {% if item.tech_tags %}<p class="meta"><data data-field="tech_tags" value="{{ item.tech_tags }}">{{ item.tech_tags }}</data></p>{% endif %}
     {% if item.badge %}<p class="badge"><data data-field="badge" value="{{ item.badge }}">{{ item.badge }}</data></p>{% endif %}
     <p class="id"><data data-field="id" value="{{ item.id }}">{{ item.id }}</data></p>
   </article>
@@ -34,4 +41,7 @@
   <p>No projects on this page.</p>
   {% endfor %}
 </div>
+{% if payload.pages > 1 %}
+<p class="meta">Page {{ payload.page }} of {{ payload.pages }}{% if payload.page < payload.pages %} · <a href="?page={{ payload.page|add:1 }}">next</a>{% endif %}</p>
+{% endif %}
 {% endblock %}

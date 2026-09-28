@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page">
+  <div><p class="kicker">team {{ payload.id }}</p><h1>{{ payload.name }}</h1></div>
+  <p class="tools"><a href="{{ payload.download_json }}">JSON</a></p>
+</header>
+<h2>Members ({{ payload.count }} of {{ payload.max_team_size }})</h2>
+<ul>
+  {% for m in payload.members %}
+  <li>{{ m.name }} <span class="id">{{ m.email }}</span>
+    {% if payload.is_staff and payload.closed == "false" %}
+    <form method="post" action="/e/{{ event_id }}/teams/{{ payload.id }}/members/{{ m.person_id }}/remove" class="inline">{% csrf_token %}<button class="outline secondary" type="submit">Remove</button></form>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+
+<h2>Submission</h2>
+{% if payload.submission %}
+<p><a href="/e/{{ event_id }}/projects/{{ payload.submission.id }}">{{ payload.submission.title }}</a> · <data data-field="submission_state" value="{{ payload.submission.state }}">{{ payload.submission.state }}</data></p>
+{% elif payload.is_member and payload.closed == "false" %}
+<p><a href="/e/{{ event_id }}/projects/new" role="button">Start the submission</a></p>
+{% else %}
+<p>No submission.</p>
+{% endif %}
+
+{% if payload.is_member and payload.closed == "false" %}
+<h2>Invite links</h2>
+<form method="post" action="/e/{{ event_id }}/teams/{{ payload.id }}/invites" class="inline">
+  {% csrf_token %}
+  <label class="inline">Uses <input type="number" name="max_uses" value="3" min="1" max="20"></label>
+  <label class="inline">Days <input type="number" name="days" value="7" min="1" max="30"></label>
+  <button type="submit">Create an invite link</button>
+</form>
+{% endif %}
+{% if payload.invites %}
+<table>
+  <thead><tr><th>Invite</th><th>Expires (UTC)</th><th>Used</th><th>Active</th><th></th></tr></thead>
+  <tbody>
+  {% for inv in payload.invites %}
+  <tr><td>{{ inv.id }}</td><td>{{ inv.expires_at }}</td><td>{{ inv.uses }}/{{ inv.max_uses }}</td><td>{{ inv.active }}</td>
+    <td>{% if inv.active == "true" %}<form method="post" action="/e/{{ event_id }}/teams/{{ payload.id }}/invites/{{ inv.id }}/revoke">{% csrf_token %}<button class="outline" type="submit">Revoke</button></form>{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% if payload.is_member and payload.closed == "false" %}
+<form method="post" action="/e/{{ event_id }}/teams/{{ payload.id }}/leave">{% csrf_token %}<button class="secondary outline" type="submit">Leave this team</button></form>
+{% endif %}
+{% if payload.closed == "true" %}<p class="meta">Submissions are closed, so the team is fixed.</p>{% endif %}
+{% endblock %}
