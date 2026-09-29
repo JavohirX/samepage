@@ -28,9 +28,18 @@ def require(principal, action: str, *, event_id: str | None = None, target: str 
     published = False
     if action == "results.read" and event_id:
         published = Event.objects.filter(id=event_id, state__in=("published", "archived")).exists()
+    voting_counted = False
+    if action == "voting.tally" and event_id:
+        from samepage.apps.portal.models import VotingTally
+        voting_counted = VotingTally.objects.filter(event_id=event_id).exists()
     target_is_self = bool(principal is not None and target and target == principal.id)
     if policy.allows(
-        roles, action, target_is_self=target_is_self, published=published, signed_in=principal is not None
+        roles,
+        action,
+        target_is_self=target_is_self,
+        published=published,
+        signed_in=principal is not None,
+        voting_counted=voting_counted,
     ):
         if event_id and not roles & policy.STAFF and Event.objects.filter(id=event_id, state="draft").exists():
             # A draft event is its organizers' work in progress: to everyone else it does not exist yet,
@@ -40,6 +49,6 @@ def require(principal, action: str, *, event_id: str | None = None, target: str 
         return roles
     # Unpublished results are a refusal, including for anonymous visitors.
     # Other protected pages answer 401 so a browser gets the sign-in form.
-    if principal is None and action != "results.read":
+    if principal is None and action not in ("results.read", "voting.tally"):
         raise NotAuthenticated("Sign in to continue.")
     raise PermissionDenied("You cannot do that.")

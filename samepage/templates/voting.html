@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% load cells %}
+{% block main %}
+<header class="page">
+  <div>
+    <h1>Community Voting</h1>
+    <p>Credit budget: <strong><data data-field="credit_budget" value="{{ payload.credit_budget }}">{{ payload.credit_budget }}</data> credits</strong>. Spreading credits $c$ over projects gives $\sqrt{c}$ influence.</p>
+  </div>
+  <p class="tools">
+    {% if is_staff %}
+    <a href="/e/{{ event_id }}/voting/settings">Settings</a>
+    <a href="/e/{{ event_id }}/voting/tally">Tally</a>
+    <a href="/e/{{ event_id }}/outbox">Mail Outbox</a>
+    {% endif %}
+    <a href="{{ payload.download_csv }}">Download CSV</a> <a href="{{ payload.download_json }}">JSON</a>
+  </p>
+</header>
+
+{% if payload.voter.excluded %}
+<div class="banner" style="background: var(--pico-del-color); color: #fff; padding: 0.75rem; border-radius: 4px; margin-bottom: 1rem;">
+  <strong>Notice:</strong> Your account was created after the submission deadline ({{ payload.voter.exclusion_reason }}). Your ballot will be saved and audited, but marked excluded from the counted tallies.
+</div>
+{% endif %}
+
+{% if payload.state != "open" %}
+<div class="banner" style="padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: 4px; margin-bottom: 1rem;">
+  <p>Voting is currently <strong>{{ payload.state }}</strong>.</p>
+  {% if is_staff and payload.state == "open" %}
+  <form method="post" action="/e/{{ event_id }}/voting/close">
+    {% csrf_token %}
+    <button type="submit" class="contrast">Close and Count Vote</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if not request.user.is_authenticated and payload.allow_email and not payload.voter.type == "email" and not payload.voter.type == "open" %}
+<article style="margin-bottom: 2rem;">
+  <header><h3>Email-Verified Voting</h3></header>
+  <p>Enter your email to receive a single-use 15-minute magic link. Links wait in the organizer outbox.</p>
+  <form method="post" action="/e/{{ event_id }}/voting/request-link">
+    {% csrf_token %}
+    <div class="grid">
+      <input type="email" name="email" placeholder="voter@example.org" required>
+      <button type="submit">Request Magic Link</button>
+    </div>
+  </form>
+</article>
+{% endif %}
+
+<form method="post" action="/e/{{ event_id }}/voting">
+  {% csrf_token %}
+  <p class="meta">
+    Channel: <strong><data data-field="channel" value="{{ payload.voter.channel }}">{{ payload.voter.channel }}</data></strong> ·
+    Credits spent: <strong><span id="credits-spent"><data data-field="credits_spent" value="{{ payload.credits_spent }}">{{ payload.credits_spent }}</data></span> / {{ payload.credit_budget }}</strong>
+  </p>
+
+  <table role="grid">
+    <thead>
+      <tr>
+        <th scope="col">Project</th>
+        <th scope="col">Tagline</th>
+        <th scope="col" style="width: 140px;">Credits (c)</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>
+          <a href="/e/{{ event_id }}/projects/{{ item.project_id }}" target="_blank"><data data-field="title" value="{{ item.title }}">{{ item.title }}</data></a>
+          <br><small><data data-field="project_id" value="{{ item.project_id }}">{{ item.project_id }}</data></small>
+        </td>
+        <td><data data-field="tagline" value="{{ item.tagline }}">{{ item.tagline }}</data></td>
+        <td>
+          <input
+            type="number"
+            class="credit-input"
+            name="credits_{{ item.project_id }}"
+            min="0"
+            max="{{ payload.credit_budget }}"
+            value="{{ item.credits|default:0 }}"
+            style="width: 100px; margin-bottom: 0;"
+            {% if payload.state != "open" %}disabled{% endif %}
+          >
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3">No projects submitted yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if payload.state == "open" %}
+  <button type="submit">Submit Ballot</button>
+  {% endif %}
+</form>
+
+<script>
+  function updateCredits() {
+    let total = 0;
+    document.querySelectorAll('.credit-input').forEach(function(el) {
+      let v = parseInt(el.value, 10);
+      if (!isNaN(v) && v > 0) total += v;
+    });
+    let span = document.getElementById('credits-spent');
+    if (span) span.textContent = total;
+  }
+  document.querySelectorAll('.credit-input').forEach(function(el) {
+    el.addEventListener('input', updateCredits);
+  });
+</script>
+{% endblock %}

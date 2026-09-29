@@ -21,11 +21,13 @@
       {% if event_id %}
       <a href="/e/{{ event_id }}">Event</a>
       <a href="/e/{{ event_id }}/projects">Gallery</a>
+      <a href="/e/{{ event_id }}/voting">Vote</a>
       <a href="/e/{{ event_id }}/results">Results</a>
       {% if is_judge %}<a href="/e/{{ event_id }}/judge/batches">Console</a>{% endif %}
       {% if is_staff %}
       <a href="/e/{{ event_id }}/progress">Progress</a>
       <a href="/e/{{ event_id }}/scores">Scores</a>
+      <a href="/e/{{ event_id }}/comments">Comments</a>
       <a href="/e/{{ event_id }}/normalization">Lab</a>
       <a href="/e/{{ event_id }}/duplicates">Duplicates</a>
       <a href="/e/{{ event_id }}/audit">Audit</a>

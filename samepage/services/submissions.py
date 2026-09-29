@@ -477,6 +477,9 @@ def detail(event_id: str, project_id: str, *, principal, roles: set[str]) -> dic
         for row in SubmissionMedia.objects.filter(submission=submission).order_by("kind", "position").defer("data")
     ]
     closed = is_closed(db_now(), event.submissions_close)
+    from samepage.services import comments
+
+    public_comments = comments.list_public_comments(submission)
     return {
         "title": submission.title,
         "event": event_id,
@@ -486,6 +489,7 @@ def detail(event_id: str, project_id: str, *, principal, roles: set[str]) -> dic
             {"key": q["key"], "label": q["label"], "answer": answers.get(q["key"], "")} for q in questions
         ],
         "media": media,
+        "comments": public_comments,
         "can_edit": bool(on_team and not closed and event.state == "open" and submission.state != "withdrawn"),
         "can_withdraw": bool((on_team and not closed) or staff) and submission.state != "withdrawn" and event.state not in {"published", "archived"},
         "columns": list(item.keys()),

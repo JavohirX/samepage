@@ -19,3 +19,34 @@ class LoginThrottle(ScopedRateThrottle):
         if request.method != "POST":
             return True
         return super().allow_request(request, view)
+
+
+class BallotThrottle(ScopedRateThrottle):
+    cache = ConnectionProxy(caches, "throttle")
+    scope = "ballot"
+
+    def allow_request(self, request, view):
+        if request.method != "POST":
+            return True
+        return super().allow_request(request, view)
+
+
+class CommentThrottle(ScopedRateThrottle):
+    cache = ConnectionProxy(caches, "throttle")
+    scope = "comment"
+
+    def allow_request(self, request, view):
+        if request.method != "POST":
+            return True
+        return super().allow_request(request, view)
+
+
+class MagicLinkThrottle(ScopedRateThrottle):
+    cache = ConnectionProxy(caches, "throttle")
+    scope = "magic_link"
+
+    def allow_request(self, request, view):
+        if request.method != "POST":
+            return True
+        return super().allow_request(request, view)
+

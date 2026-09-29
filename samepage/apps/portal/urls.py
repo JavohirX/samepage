@@ -69,3 +69,18 @@ urlpatterns += fpath("e/<slug:evt>/judge/assignments/<slug:prj>/scores", views.C
 urlpatterns += fpath("e/<slug:evt>/judge/assignments/<slug:prj>/finalize", views.FinalizeView, "console-finalize")
 urlpatterns += fpath("e/<slug:evt>/judges/me/scores", views.OwnScoresView, "own-scores")
 urlpatterns += fpath("e/<slug:evt>/judges/<slug:jdg>/scores", views.NamedScoresView, "named-scores")
+
+# Community voting (T3)
+urlpatterns += fpath("e/<slug:evt>/voting", views.VotingView, "voting")
+urlpatterns += fpath("e/<slug:evt>/voting/settings", views.VotingSettingsView, "voting-settings")
+urlpatterns += fpath("e/<slug:evt>/voting/close", views.VotingCloseView, "voting-close")
+urlpatterns += fpath("e/<slug:evt>/voting/tally", views.VotingTallyView, "voting-tally")
+urlpatterns += fpath("e/<slug:evt>/voting/request-link", views.VotingRequestLinkView, "voting-request-link")
+urlpatterns += [path("vote/<slug:token>", views.VoteOpenLinkView.as_view(), name="vote-open")]
+urlpatterns += fpath("e/<slug:evt>/outbox", views.MailOutboxView, "mail-outbox")
+
+# Public comments & pre-moderation (T3)
+urlpatterns += fpath("e/<slug:evt>/projects/<slug:prj>/comments", views.ProjectCommentsView, "project-comments")
+urlpatterns += fpath("e/<slug:evt>/comments", views.CommentsQueueView, "comments-queue")
+urlpatterns += fpath("e/<slug:evt>/comments/<slug:cmt>/approve", views.CommentApproveView, "comment-approve")
+urlpatterns += fpath("e/<slug:evt>/comments/<slug:cmt>/reject", views.CommentRejectView, "comment-reject")

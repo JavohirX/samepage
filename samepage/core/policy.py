@@ -48,11 +48,19 @@ ACTION_POLICY = {
     "judge.console": {JUDGE},
     "judge.score": {JUDGE},
     "publish": STAFF,
+    "voting.read": EVERYONE,
+    "voting.vote": EVERYONE,
+    "voting.manage": STAFF,
+    "voting.close": STAFF,
+    "voting.tally": STAFF,
+    "outbox.read": STAFF,
+    "comment.create": EVERYONE,
+    "comments.moderate": STAFF,
 }
 
 # These need a signed-in person even where the role column says visitor: a visitor who is
 # signed in may start or join a team, an anonymous one is asked to sign in (401).
-SIGNED_IN = {"account.manage", "team.create", "invite.accept", "role.accept"}
+SIGNED_IN = {"account.manage", "team.create", "invite.accept", "role.accept", "comment.create"}
 
 # Role × field → hidden. Blind mode adds team identity for judges at runtime.
 FIELD_POLICY = {
@@ -77,11 +85,14 @@ def allows(
     target_is_self: bool = False,
     published: bool = False,
     signed_in: bool = True,
+    voting_counted: bool = False,
 ) -> bool:
     roles = set(roles or {VISITOR})
     if action in SIGNED_IN and not signed_in:
         return False
     if action == "results.read" and published:
+        return True
+    if action == "voting.tally" and voting_counted:
         return True
     if action == "scores.read_named":
         if roles & STAFF:
@@ -90,7 +101,7 @@ def allows(
     if action == "scores.read_own":
         return JUDGE in roles
     allowed = ACTION_POLICY.get(action, set())
-    if action in {"gallery.read", "project.read", "about.read"}:
+    if action in {"gallery.read", "project.read", "about.read", "voting.read", "voting.vote"}:
         return True
     return bool(roles & allowed)
 

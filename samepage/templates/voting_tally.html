@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page">
+  <div>
+    <h1>Voting Tally</h1>
+    <p>Quadratic voting influence tallies computed in exact arithmetic ($influence = \sum \sqrt{c}$).</p>
+  </div>
+  <p class="tools">
+    <a href="/e/{{ event_id }}/voting">Voting Form</a>
+    {% if is_staff %}<a href="/e/{{ event_id }}/voting/settings">Settings</a>{% endif %}
+    {% if payload.download_csv %}<a href="{{ payload.download_csv }}">Download CSV</a>{% endif %}
+    <a href="{{ payload.download_json }}">JSON</a>
+  </p>
+</header>
+
+{% if payload.status == "in_progress" %}
+<article>
+  <header><h3>Voting in Progress</h3></header>
+  <p><data data-field="total_ballots" value="{{ payload.ballot_counts.total }}">{{ payload.ballot_counts.total }}</data> ballots have been cast so far.</p>
+  <p><em>Per spec and design, results are hidden from all viewers until an organizer closes and counts the vote.</em></p>
+  {% if is_staff %}
+  <form method="post" action="/e/{{ event_id }}/voting/close">
+    {% csrf_token %}
+    <button type="submit" class="contrast">Close and Count Vote Now</button>
+  </form>
+  {% endif %}
+</article>
+
+{% else %}
+
+<article style="margin-bottom: 2rem;">
+  <p class="meta">
+    Total ballots: <strong><data data-field="total_ballots" value="{{ payload.ballot_counts.total }}">{{ payload.ballot_counts.total }}</data></strong> ·
+    Counted: <strong><data data-field="counted_ballots" value="{{ payload.ballot_counts.counted }}">{{ payload.ballot_counts.counted }}</data></strong> ·
+    Excluded: <strong><data data-field="excluded_ballots" value="{{ payload.ballot_counts.excluded }}">{{ payload.ballot_counts.excluded }}</data></strong> (cutoff at submission deadline) ·
+    Participants: <strong><data data-field="participants_ballots" value="{{ payload.ballot_counts.participants }}">{{ payload.ballot_counts.participants }}</data></strong> ·
+    Public: <strong><data data-field="public_ballots" value="{{ payload.ballot_counts.public }}">{{ payload.ballot_counts.public }}</data></strong>
+  </p>
+</article>
+
+<div class="grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+  <div>
+    <h2>Participants Tally</h2>
+    <p><small>Accounts with a team in this event.</small></p>
+    <table role="grid">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Project</th>
+          <th>Credits</th>
+          <th>Influence</th>
+          <th>Voters</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in payload.participants %}
+        <tr>
+          <td><data data-field="rank" value="{{ row.rank }}">{{ row.rank }}</data></td>
+          <td><a href="/e/{{ event_id }}/projects/{{ row.project_id }}"><data data-field="project_id" value="{{ row.project_id }}">{{ row.project_id }}</data></a></td>
+          <td><data data-field="credits" value="{{ row.credits }}">{{ row.credits }}</data></td>
+          <td><strong><data data-field="influence" value="{{ row.influence }}">{{ row.influence }}</data></strong></td>
+          <td><data data-field="voters" value="{{ row.voters }}">{{ row.voters }}</data></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">No participant votes recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div>
+    <h2>Public Tally</h2>
+    <p><small>Open links and email-verified voters.</small></p>
+    <table role="grid">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Project</th>
+          <th>Credits</th>
+          <th>Influence</th>
+          <th>Voters</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in payload.public %}
+        <tr>
+          <td><data data-field="rank" value="{{ row.rank }}">{{ row.rank }}</data></td>
+          <td><a href="/e/{{ event_id }}/projects/{{ row.project_id }}"><data data-field="project_id" value="{{ row.project_id }}">{{ row.project_id }}</data></a></td>
+          <td><data data-field="credits" value="{{ row.credits }}">{{ row.credits }}</data></td>
+          <td><strong><data data-field="influence" value="{{ row.influence }}">{{ row.influence }}</data></strong></td>
+          <td><data data-field="voters" value="{{ row.voters }}">{{ row.voters }}</data></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">No public votes recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<hr>
+<h2>Combined Tally</h2>
+<table role="grid">
+  <thead>
+    <tr>
+      <th>Rank</th>
+      <th>Project</th>
+      <th>Total Credits</th>
+      <th>Total Influence</th>
+      <th>Total Voters</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in payload.combined %}
+    <tr>
+      <td><data data-field="rank" value="{{ row.rank }}">{{ row.rank }}</data></td>
+      <td><a href="/e/{{ event_id }}/projects/{{ row.project_id }}"><data data-field="project_id" value="{{ row.project_id }}">{{ row.project_id }}</data></a></td>
+      <td><data data-field="credits" value="{{ row.credits }}">{{ row.credits }}</data></td>
+      <td><strong><data data-field="influence" value="{{ row.influence }}">{{ row.influence }}</data></strong></td>
+      <td><data data-field="voters" value="{{ row.voters }}">{{ row.voters }}</data></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5">No votes recorded.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page">
+  <div>
+    <h1>Voting Settings</h1>
+    <p>Configure community quadratic voting window, credit budget, and access channels.</p>
+  </div>
+  <p class="tools">
+    <a href="/e/{{ event_id }}/voting">Back to Voting</a>
+    <a href="/e/{{ event_id }}/voting/tally">Tally</a>
+    <a href="{{ payload.download_json }}">JSON</a>
+  </p>
+</header>
+
+<form method="post" action="/e/{{ event_id }}/voting/settings">
+  {% csrf_token %}
+  <label for="state">Status</label>
+  <select id="state" name="state">
+    <option value="draft" {% if payload.state == "draft" %}selected{% endif %}>Draft (hidden from public)</option>
+    <option value="open" {% if payload.state == "open" %}selected{% endif %}>Open (accepting ballots)</option>
+    <option value="closed" {% if payload.state == "closed" %}selected{% endif %}>Closed</option>
+    {% if payload.state == "counted" %}<option value="counted" selected>Counted (frozen)</option>{% endif %}
+  </select>
+
+  <label for="credit_budget">Credit Budget (B)</label>
+  <input type="number" id="credit_budget" name="credit_budget" value="{{ payload.credit_budget }}" min="1" required>
+  <small>Total credits each voter can spread across projects. Spreading $c$ credits yields $\sqrt{c}$ influence.</small>
+
+  <div class="grid">
+    <div>
+      <label for="opens_at">Voting Opens (UTC)</label>
+      <input type="text" id="opens_at" name="opens_at" value="{{ payload.opens_at|default:'' }}" placeholder="YYYY-MM-DDTHH:MM:SSZ">
+      <small>Cannot open earlier than submissions close.</small>
+    </div>
+    <div>
+      <label for="closes_at">Voting Closes (UTC)</label>
+      <input type="text" id="closes_at" name="closes_at" value="{{ payload.closes_at|default:'' }}" placeholder="YYYY-MM-DDTHH:MM:SSZ">
+      <small>Must close after opening.</small>
+    </div>
+  </div>
+
+  <fieldset>
+    <legend><strong>Access Channels</strong></legend>
+    <label>
+      <input type="checkbox" name="allow_accounts" {% if payload.allow_accounts %}checked{% endif %}>
+      Authenticated accounts (team participants vs public accounts tracked separately)
+    </label>
+    <label>
+      <input type="checkbox" name="allow_open" {% if payload.allow_open %}checked{% endif %}>
+      Open link voting (browser session token)
+    </label>
+    {% if payload.open_url %}
+    <p><small>Open voting link: <a href="{{ payload.open_url }}">{{ payload.open_url }}</a></small></p>
+    {% endif %}
+    <label>
+      <input type="checkbox" name="allow_email" {% if payload.allow_email %}checked{% endif %}>
+      Email-verified voting (single-use 15-minute magic link via outbox)
+    </label>
+  </fieldset>
+
+  <button type="submit">Save Voting Settings</button>
+</form>
+
+{% if payload.state == "open" %}
+<hr>
+<h2>Close and Count</h2>
+<p>Closing the vote computes the immutable final tally and triggers a database lock preventing any further ballot submissions.</p>
+<form method="post" action="/e/{{ event_id }}/voting/close">
+  {% csrf_token %}
+  <button type="submit" class="contrast">Close and Count Vote Now</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page">
+  <div>
+    <h1>Mail Outbox</h1>
+    <p>Single-use 15-minute magic links for email-verified voting. Nothing leaves the host without SMTP.</p>
+  </div>
+  <p class="tools">
+    <a href="/e/{{ event_id }}/voting">Voting Form</a>
+    <a href="{{ payload.download_csv }}">Download CSV</a>
+    <a href="{{ payload.download_json }}">JSON</a>
+  </p>
+</header>
+
+{% if payload.demo_inbox %}
+<article style="border: 2px dashed var(--pico-primary); margin-bottom: 2rem;">
+  <header><h3>Demo Inbox (Evaluation Only)</h3></header>
+  <p>In demo mode, evaluators can click pending magic links directly to test the email verification flow:</p>
+  <ul>
+    {% for item in items %}
+    {% if not item.used_at %}
+    <li>
+      <strong>{{ item.recipient_email }}</strong>:
+      <a href="{{ item.magic_url }}" role="button" class="outline" style="padding: 0.2rem 0.6rem; font-size: 0.85rem;">Click to vote as {{ item.recipient_email }}</a>
+      (expires {{ item.expires_at }})
+    </li>
+    {% endif %}
+    {% empty %}
+    <li>No pending magic links in outbox.</li>
+    {% endfor %}
+  </ul>
+</article>
+{% endif %}
+
+<table role="grid">
+  <thead>
+    <tr>
+      <th>Recipient</th>
+      <th>Subject</th>
+      <th>Created (UTC)</th>
+      <th>Expires (UTC)</th>
+      <th>Used (UTC)</th>
+      <th>Magic Link</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td><data data-field="recipient_email" value="{{ item.recipient_email }}">{{ item.recipient_email }}</data></td>
+      <td><data data-field="subject" value="{{ item.subject }}">{{ item.subject }}</data></td>
+      <td><data data-field="created_at" value="{{ item.created_at }}">{{ item.created_at }}</data></td>
+      <td><data data-field="expires_at" value="{{ item.expires_at }}">{{ item.expires_at }}</data></td>
+      <td><data data-field="used_at" value="{{ item.used_at }}">{{ item.used_at|default:"unused" }}</data></td>
+      <td><small><code>{{ item.magic_url }}</code></small></td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">Outbox is empty.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -97,6 +97,19 @@ READS = [
     ("/e/evt_02/teams/tm_e2", "hj", "401 403 200 403 403 200 200"),
     ("/e/evt_02/judge/batches", "hjc", "401 403 403 403 403 403 403"),
     ("/e/evt_02/judges/me/scores", "hjc", "401 403 403 403 403 403 403"),
+    # Community voting (T3)
+    ("/vote/tok_unknown", "h", ALL_404),
+    ("/e/evt_01/voting", "hjc", PUBLIC),
+    ("/e/evt_01/voting/settings", "hj", STAFF),
+    ("/e/evt_01/voting/close", "hj", STAFF_POST_ONLY),
+    ("/e/evt_01/voting/tally", "hjc", "403 403 403 403 403 200 200"),
+    ("/e/evt_01/voting/request-link", "hj", "405 405 405 405 405 405 405"),
+    ("/e/evt_01/outbox", "hjc", STAFF),
+    # Public comments & pre-moderation (T3)
+    ("/e/evt_01/projects/prj_01/comments", "hjc", PUBLIC),
+    ("/e/evt_01/comments", "hjc", STAFF),
+    ("/e/evt_01/comments/cmt_unknown/approve", "hj", STAFF_POST_ONLY),
+    ("/e/evt_01/comments/cmt_unknown/reject", "hj", STAFF_POST_ONLY),
 ]
 
 # method, path, expected status per principal for an empty JSON body.
@@ -134,6 +147,15 @@ WRITES = [
     ("POST", "/e/evt_01/judge/assignments/prj_22/scores.json", "401 403 403 422 403 403 403"),
     ("POST", "/e/evt_01/judge/assignments/prj_13/finalize.json", "401 403 403 403 422 403 403"),
     ("POST", "/e/evt_02/judge/assignments/prj_01/scores.json", "401 403 403 403 403 403 403"),
+    # Community voting (T3)
+    ("POST", "/e/evt_01/voting.json", "422 422 422 422 422 422 422"),
+    ("POST", "/e/evt_01/voting/settings.json", "401 403 403 403 403 200 200"),
+    ("POST", "/e/evt_01/voting/close.json", "401 403 403 403 403 200 200"),
+    ("POST", "/e/evt_01/voting/request-link.json", "422 422 422 422 422 422 422"),
+    # Public comments & pre-moderation (T3)
+    ("POST", "/e/evt_01/projects/prj_01/comments.json", "401 422 422 422 422 422 422"),
+    ("POST", "/e/evt_01/comments/cmt_unknown/approve.json", "401 403 403 403 403 404 404"),
+    ("POST", "/e/evt_01/comments/cmt_unknown/reject.json", "401 403 403 403 403 404 404"),
 ]
 
 # Session routes: POST needs a CSRF token and starts or ends a cookie session (tests/test_sessions.py,

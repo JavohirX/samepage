@@ -41,6 +41,32 @@
 {% if payload.can_withdraw %}
 <form method="post" action="/e/{{ event_id }}/projects/{{ item.id }}/withdraw">{% csrf_token %}<button class="secondary outline" type="submit">Withdraw this submission</button></form>
 {% endif %}
+
+<h2>Comments</h2>
+{% if payload.comments %}
+<div class="comments-list">
+  {% for c in payload.comments %}
+  <article class="comment" style="margin-bottom: 1rem; padding: 1rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);">
+    <header><strong>{{ c.author_name }}</strong> <small style="color: var(--pico-muted-color);">{{ c.created_at }}</small></header>
+    <p>{{ c.text|linebreaksbr }}</p>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p>No comments yet.</p>
+{% endif %}
+
+{% if request.user.is_authenticated %}
+<h3>Leave a comment</h3>
+<form method="post" action="/e/{{ event_id }}/projects/{{ item.id }}/comments">
+  {% csrf_token %}
+  <textarea name="text" rows="3" placeholder="Share your thoughts (comments are pre-moderated)..." required maxlength="2000"></textarea>
+  <button type="submit">Submit Comment</button>
+</form>
+{% else %}
+<p><a href="/login?next=/e/{{ event_id }}/projects/{{ item.id }}">Sign in to leave a comment</a></p>
+{% endif %}
+
 <p class="tools"><a href="{{ payload.download_json }}">JSON</a></p>
 {% endwith %}
 {% endblock %}

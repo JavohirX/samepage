@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 
 from django.conf import settings
@@ -9,22 +10,48 @@ from django.contrib.auth import authenticate, login, logout
 from django.db import DatabaseError, connection, transaction
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
 from rest_framework.exceptions import MethodNotAllowed, NotFound
 
-from samepage.apps.portal.models import Assignment, AssignmentRun, Batch, Event, Person, RoleGrant, TeamMember
+from samepage.apps.portal.models import (
+    Assignment,
+    AssignmentRun,
+    Ballot,
+    Batch,
+    Event,
+    MailOutbox,
+    Person,
+    ProjectComment,
+    RoleGrant,
+    Submission,
+    TeamMember,
+    VotingConfig,
+)
 from samepage.core.csrf import enforce_csrf
 from samepage.core.errors import Unprocessable, problem_response
 from samepage.core.headers import annotate
 from samepage.core.policy import hidden_fields
-from samepage.core.throttles import LoginThrottle
+from samepage.core.throttles import BallotThrottle, CommentThrottle, LoginThrottle, MagicLinkThrottle
 from samepage.core.renderers import negotiate, render_payload
 from samepage.core.views import NUL_MESSAGE, SamepageView, nul_field
 from samepage.domain.deadline import is_closed
 from samepage.domain.tokens import DEMO_PASSWORD, PRINCIPALS
 from samepage.domain.transitions import EVENT as EVENT_MACHINE
-from samepage.services import access, accounts, duplicates, events, judging, ledger, results, submissions, teams
+from samepage.services import (
+    access,
+    accounts,
+    comments,
+    duplicates,
+    events,
+    judging,
+    ledger,
+    results,
+    submissions,
+    teams,
+    voting,
+)
 from samepage.services.audit import verify
 from samepage.services.clock import db_now
 
@@ -1122,3 +1149,461 @@ class FinalizeView(SamepageView):
         if _wants_html(request, fmt):
             return Redirect303(f"/e/{evt}/judge/assignments/{prj}")
         return _json(request, result, 200, f"/e/{evt}/judge/assignments/{prj}.json", fmt)
+
+
+class VotingView(SamepageView):
+    action = "voting.read"
+    write_action = "voting.vote"
+    throttle_classes = [BallotThrottle]
+
+    def _resolve_voter(self, request, evt):
+        if getattr(request, "principal", None):
+            return "account", request.principal, "", "", str(request.principal.id)
+        if request.session.get("voting_email"):
+            email = request.session["voting_email"]
+            return "email", None, "", email, email
+        token = request.session.get("voting_open_token")
+        if token or request.session.session_key:
+            if not request.session.session_key:
+                request.session.save()
+            key = request.session.session_key
+            return "open", None, key, "", key
+        return "open", None, "", "", "anon"
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        config = voting.get_or_create_config(event)
+        vtype, person, sess_key, email, voter_key = self._resolve_voter(request, evt)
+
+        channel = "public"
+        is_excluded = False
+        reason = ""
+        if vtype == "account" and person:
+            if event.submissions_close and person.created_at > event.submissions_close:
+                is_excluded = True
+                reason = "account_created_after_submission_deadline"
+            if TeamMember.objects.filter(event=event, person=person).exists():
+                channel = "participants"
+            else:
+                channel = "public"
+
+        ballot = None
+        if vtype == "account" and person:
+            ballot = Ballot.objects.filter(event=event, person=person).first()
+        elif vtype == "email" and email:
+            ballot = Ballot.objects.filter(event=event, voter_email=email).first()
+        elif vtype == "open" and sess_key:
+            ballot = Ballot.objects.filter(event=event, session_key=sess_key).first()
+
+        existing_votes = {}
+        if ballot:
+            existing_votes = {line.submission_id: line.credits for line in ballot.lines.all()}
+
+        submissions = voting.get_projects_for_voter(event, voter_key)
+        items = [
+            {
+                "project_id": s.id,
+                "title": s.title,
+                "tagline": s.tagline,
+                "credits": existing_votes.get(s.id, 0),
+            }
+            for s in submissions
+        ]
+
+        payload = {
+            "title": f"Community Voting · {event.name}",
+            "resource": "voting",
+            "event": evt,
+            "state": config.state,
+            "credit_budget": config.credit_budget,
+            "opens_at": config.opens_at.isoformat() if config.opens_at else None,
+            "closes_at": config.closes_at.isoformat() if config.closes_at else None,
+            "allow_accounts": config.allow_accounts,
+            "allow_open": config.allow_open,
+            "allow_email": config.allow_email,
+            "voter": {
+                "type": vtype,
+                "channel": channel,
+                "excluded": is_excluded,
+                "exclusion_reason": reason,
+            },
+            "credits_spent": ballot.credits_spent if ballot else 0,
+            "columns": ["project_id", "title", "credits"],
+            "items": items,
+            "count": len(items),
+            "download_csv": f"/e/{evt}/voting.csv",
+            "download_json": f"/e/{evt}/voting.json",
+        }
+        return render_payload(request, payload, fmt, template="voting.html")
+
+    def post(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        body = _body(request)
+        vtype, person, sess_key, email, _ = self._resolve_voter(request, evt)
+
+        # Parse votes
+        votes = {}
+        if "votes" in body and isinstance(body["votes"], dict):
+            votes = {k: int(v) for k, v in body["votes"].items() if int(v) > 0}
+        else:
+            for k, v in body.items():
+                if k.startswith("credits_"):
+                    pid = k[len("credits_") :]
+                    try:
+                        cr = int(v)
+                        if cr > 0:
+                            votes[pid] = cr
+                    except (ValueError, TypeError):
+                        pass
+
+        client_ip = request.META.get("REMOTE_ADDR")
+        ballot = voting.cast_ballot(
+            event,
+            vtype,
+            votes,
+            person=person,
+            session_key=sess_key,
+            voter_email=email,
+            client_ip=client_ip,
+        )
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/voting",
+            payload={
+                "ok": True,
+                "ballot_id": ballot.id,
+                "credits_spent": ballot.credits_spent,
+                "channel": ballot.channel,
+                "excluded": ballot.excluded,
+            },
+            status=200,
+            location=f"/e/{evt}/voting.json",
+        )
+
+
+class VotingSettingsView(SamepageView):
+    formats = ("html", "json")
+    action = "voting.manage"
+    write_action = "voting.manage"
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        config = voting.get_or_create_config(event)
+        open_url = f"/vote/{config.open_token}" if config.open_token else ""
+        payload = {
+            "title": f"Voting Settings · {event.name}",
+            "resource": "voting_settings",
+            "event": evt,
+            "state": config.state,
+            "credit_budget": config.credit_budget,
+            "opens_at": config.opens_at.isoformat() if config.opens_at else "",
+            "closes_at": config.closes_at.isoformat() if config.closes_at else "",
+            "allow_accounts": config.allow_accounts,
+            "allow_open": config.allow_open,
+            "open_url": open_url,
+            "allow_email": config.allow_email,
+            "download_json": f"/e/{evt}/voting/settings.json",
+        }
+        return render_payload(request, payload, fmt, template="voting_settings.html")
+
+    def post(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        body = _body(request)
+        params = {}
+        if "credit_budget" in body:
+            params["credit_budget"] = body["credit_budget"]
+        if "state" in body:
+            params["state"] = body["state"]
+        if "allow_accounts" in body:
+            params["allow_accounts"] = str(body["allow_accounts"]).lower() in {"1", "true", "on"}
+        if "allow_open" in body:
+            params["allow_open"] = str(body["allow_open"]).lower() in {"1", "true", "on"}
+        if "allow_email" in body:
+            params["allow_email"] = str(body["allow_email"]).lower() in {"1", "true", "on"}
+        if "opens_at" in body:
+            v = body["opens_at"]
+            params["opens_at"] = timezone.datetime.fromisoformat(v) if v else None
+        if "closes_at" in body:
+            v = body["closes_at"]
+            params["closes_at"] = timezone.datetime.fromisoformat(v) if v else None
+
+        actor = request.principal.email if request.principal else "admin"
+        config = voting.update_config(event, actor, **params)
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/voting/settings",
+            payload={"ok": True, "state": config.state, "credit_budget": config.credit_budget},
+            status=200,
+            location=f"/e/{evt}/voting/settings.json",
+        )
+
+    def patch(self, request, evt, fmt=None):
+        return self.post(request, evt, fmt)
+
+
+class VotingCloseView(SamepageView):
+    formats = ("html", "json")
+    action = "voting.close"
+    write_action = "voting.close"
+
+    def post(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        actor = request.principal.email if request.principal else "admin"
+        tally = voting.close_and_count(event, actor)
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/voting/tally",
+            payload=tally.payload,
+            status=200,
+            location=f"/e/{evt}/voting/tally.json",
+        )
+
+
+class VotingTallyView(SamepageView):
+    action = "voting.tally"
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        roles = access.roles_of(request.principal, evt)
+        is_staff = bool(roles & {"organizer", "admin"})
+        tally_data = voting.get_tally(event, is_staff)
+
+        # If voting still in progress
+        if tally_data.get("status") == "in_progress":
+            payload = {
+                "title": f"Voting Tally · {event.name}",
+                "resource": "voting_tally",
+                "event": evt,
+                "status": "in_progress",
+                "ballot_counts": tally_data.get("ballot_counts", {}),
+                "message": tally_data.get("message", ""),
+                "download_json": f"/e/{evt}/voting/tally.json",
+            }
+            return render_payload(request, payload, fmt, template="voting_tally.html")
+
+        # Counted: build items for CSV
+        csv_items = []
+        for ch in ("participants", "public", "combined"):
+            for row in tally_data.get(ch, []):
+                csv_items.append({
+                    "channel": ch,
+                    "rank": row["rank"],
+                    "project_id": row["project_id"],
+                    "credits": row["credits"],
+                    "influence": row["influence"],
+                    "voters": row["voters"],
+                })
+
+        payload = {
+            "title": f"Voting Tally · {event.name}",
+            "resource": "voting_tally",
+            "event": evt,
+            "status": "counted",
+            "ballot_counts": tally_data.get("ballot_counts", {}),
+            "participants": tally_data.get("participants", []),
+            "public": tally_data.get("public", []),
+            "combined": tally_data.get("combined", []),
+            "columns": ["channel", "rank", "project_id", "credits", "influence", "voters"],
+            "items": csv_items,
+            "count": len(csv_items),
+            "download_csv": f"/e/{evt}/voting/tally.csv",
+            "download_json": f"/e/{evt}/voting/tally.json",
+        }
+        return render_payload(request, payload, fmt, template="voting_tally.html")
+
+
+class VotingRequestLinkView(SamepageView):
+    formats = ("html", "json")
+    action = "voting.read"
+    write_action = "voting.read"
+    throttle_classes = [MagicLinkThrottle]
+
+    def post(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        body = _body(request)
+        email = str(body.get("email", "")).strip().lower()
+        if not email or "@" not in email:
+            raise Unprocessable("A valid email address is required.")
+        voting.request_magic_link(event, email, request.build_absolute_uri("/"))
+        # S1: Magic link is NEVER shown on the voter's screen.
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/voting",
+            payload={"ok": True, "message": "A magic link has been sent to your email (valid for 15 minutes)."},
+            status=200,
+            location=f"/e/{evt}/voting.json",
+        )
+
+
+class VoteOpenLinkView(SamepageView):
+    action = "voting.read"
+
+    def get(self, request, token, fmt=None):
+        # 1. Check if token is a magic link
+        token_sha = hashlib.sha256(token.encode("utf-8")).hexdigest()
+        outbox = MailOutbox.objects.filter(token_sha256=token_sha).first()
+        if outbox:
+            event, email = voting.redeem_magic_link(token)
+            request.session["voting_email"] = email
+            request.session["voting_event"] = event.id
+            return Redirect303(f"/e/{event.id}/voting")
+
+        # 2. Check if token is an open voting token
+        config = VotingConfig.objects.filter(open_token=token, allow_open=True).first()
+        if config:
+            request.session["voting_open_token"] = token
+            request.session["voting_event"] = config.event_id
+            if not request.session.session_key:
+                request.session.save()
+            return Redirect303(f"/e/{config.event_id}/voting")
+
+        raise NotFound("Invalid or expired voting link.")
+
+
+class MailOutboxView(SamepageView):
+    action = "outbox.read"
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        rows = MailOutbox.objects.filter(event=event).order_by("-created_at")
+        items = [
+            {
+                "recipient_email": r.recipient_email,
+                "subject": r.subject,
+                "magic_url": r.magic_url,
+                "expires_at": r.expires_at.isoformat(),
+                "used_at": r.used_at.isoformat() if r.used_at else "",
+                "created_at": r.created_at.isoformat(),
+            }
+            for r in rows
+        ]
+        payload = {
+            "title": f"Mail Outbox · {event.name}",
+            "resource": "mail_outbox",
+            "event": evt,
+            "columns": ["recipient_email", "subject", "magic_url", "expires_at", "used_at", "created_at"],
+            "items": items,
+            "count": len(items),
+            "demo_inbox": bool(settings.DEMO_MODE),
+            "download_csv": f"/e/{evt}/outbox.csv",
+            "download_json": f"/e/{evt}/outbox.json",
+        }
+        return render_payload(request, payload, fmt, template="outbox.html")
+
+
+class ProjectCommentsView(SamepageView):
+    action = "project.read"
+    write_action = "comment.create"
+    throttle_classes = [CommentThrottle]
+
+    def get(self, request, evt, prj, fmt=None):
+        submission = Submission.objects.filter(event_id=evt, id=prj).first()
+        if not submission:
+            raise NotFound("Unknown project.")
+        items = comments.list_public_comments(submission)
+        payload = {
+            "title": f"Comments · {submission.title}",
+            "resource": "comments",
+            "event": evt,
+            "project": prj,
+            "columns": ["id", "author_name", "text", "created_at"],
+            "items": items,
+            "count": len(items),
+            "download_csv": f"/e/{evt}/projects/{prj}/comments.csv",
+            "download_json": f"/e/{evt}/projects/{prj}/comments.json",
+        }
+        return render_payload(request, payload, fmt, template="project.html")
+
+    def post(self, request, evt, prj, fmt=None):
+        submission = Submission.objects.filter(event_id=evt, id=prj).first()
+        if not submission:
+            raise NotFound("Unknown project.")
+        body = _body(request)
+        text = str(body.get("text", "")).strip()
+        cmt = comments.post_comment(submission, request.principal, text)
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/projects/{prj}",
+            payload={"id": cmt.id, "state": "pending", "message": "Comment submitted for moderation."},
+            status=201,
+            location=f"/e/{evt}/projects/{prj}/comments.json",
+        )
+
+
+class CommentsQueueView(SamepageView):
+    action = "comments.moderate"
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        items = comments.list_moderation_queue(event)
+        payload = {
+            "title": f"Comments Queue · {event.name}",
+            "resource": "comments_queue",
+            "event": evt,
+            "columns": ["id", "project_id", "project_title", "author_email", "text", "state", "created_at", "reviewed_by", "reviewed_at"],
+            "items": items,
+            "count": len(items),
+            "download_csv": f"/e/{evt}/comments.csv",
+            "download_json": f"/e/{evt}/comments.json",
+        }
+        return render_payload(request, payload, fmt, template="comments_queue.html")
+
+
+class CommentApproveView(SamepageView):
+    formats = ("html", "json")
+    action = "comments.moderate"
+    write_action = "comments.moderate"
+
+    def post(self, request, evt, cmt, fmt=None):
+        comments.approve_comment(cmt, request.principal)
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/comments",
+            payload={"ok": True, "state": "approved"},
+            status=200,
+            location=f"/e/{evt}/comments.json",
+        )
+
+
+class CommentRejectView(SamepageView):
+    formats = ("html", "json")
+    action = "comments.moderate"
+    write_action = "comments.moderate"
+
+    def post(self, request, evt, cmt, fmt=None):
+        body = _body(request)
+        reason = str(body.get("reason", "")).strip()
+        comments.reject_comment(cmt, request.principal, reason=reason)
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/comments",
+            payload={"ok": True, "state": "rejected"},
+            status=200,
+            location=f"/e/{evt}/comments.json",
+        )
+

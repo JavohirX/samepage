@@ -465,3 +465,143 @@ class NormalizationRun(models.Model):
         constraints = [
             models.CheckConstraint(condition=Q(state__in=("ok", "failed")), name="norm_state"),
         ]
+
+
+class VotingConfig(models.Model):
+    STATES = ("draft", "open", "closed", "counted")
+    id = models.TextField(primary_key=True)
+    event = models.OneToOneField(Event, on_delete=models.CASCADE, related_name="voting_config")
+    opens_at = models.DateTimeField(null=True, blank=True)
+    closes_at = models.DateTimeField(null=True, blank=True)
+    credit_budget = models.PositiveIntegerField(default=25)
+    allow_accounts = models.BooleanField(default=True)
+    allow_open = models.BooleanField(default=False)
+    open_token = models.CharField(max_length=64, blank=True, default="")
+    allow_email = models.BooleanField(default=False)
+    state = models.TextField(default="draft")
+    counted_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "voting_config"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(state__in=("draft", "open", "closed", "counted")),
+                name="voting_config_state",
+            ),
+            models.CheckConstraint(
+                condition=Q(credit_budget__gt=0),
+                name="voting_config_budget_positive",
+            ),
+        ]
+
+
+class Ballot(models.Model):
+    CHANNELS = ("participants", "public")
+    VOTER_TYPES = ("account", "open", "email")
+    id = models.TextField(primary_key=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="ballots")
+    voter_type = models.TextField(default="account")
+    person = models.ForeignKey(Person, null=True, blank=True, on_delete=models.SET_NULL, related_name="ballots")
+    voter_email = models.EmailField(blank=True, default="")
+    session_key = models.CharField(max_length=64, blank=True, default="")
+    sequence_number = models.PositiveIntegerField(default=1)
+    channel = models.TextField(default="public")
+    excluded = models.BooleanField(default=False)
+    exclusion_reason = models.TextField(blank=True, default="")
+    credits_spent = models.PositiveIntegerField(default=0)
+    client_ip = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "ballot"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(voter_type__in=("account", "open", "email")),
+                name="ballot_voter_type",
+            ),
+            models.CheckConstraint(
+                condition=Q(channel__in=("participants", "public")),
+                name="ballot_channel",
+            ),
+            models.UniqueConstraint(
+                fields=["event", "person"],
+                condition=Q(person__isnull=False),
+                name="ballot_account_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["event", "session_key"],
+                condition=~Q(session_key=""),
+                name="ballot_session_uniq",
+            ),
+            models.UniqueConstraint(
+                fields=["event", "voter_email"],
+                condition=~Q(voter_email=""),
+                name="ballot_email_uniq",
+            ),
+        ]
+
+
+class BallotLine(models.Model):
+    ballot = models.ForeignKey(Ballot, on_delete=models.CASCADE, related_name="lines")
+    submission = models.ForeignKey(Submission, on_delete=models.PROTECT, related_name="ballot_lines")
+    credits = models.PositiveIntegerField()
+
+    class Meta:
+        db_table = "ballot_line"
+        constraints = [
+            models.UniqueConstraint(fields=["ballot", "submission"], name="ballot_line_uniq"),
+            models.CheckConstraint(condition=Q(credits__gt=0), name="ballot_line_credits_positive"),
+        ]
+
+
+class VotingTally(models.Model):
+    id = models.TextField(primary_key=True)
+    event = models.OneToOneField(Event, on_delete=models.CASCADE, related_name="voting_tally")
+    created_at = models.DateTimeField(default=timezone.now)
+    created_by = models.TextField(blank=True, default="")
+    audit_seq = models.BigIntegerField()
+    payload = models.JSONField(default=dict)
+
+    class Meta:
+        db_table = "voting_tally"
+
+
+class MailOutbox(models.Model):
+    id = models.TextField(primary_key=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="mail_outbox")
+    recipient_email = models.EmailField()
+    subject = models.TextField()
+    token_sha256 = models.CharField(max_length=64, unique=True)
+    magic_url = models.TextField()
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "mail_outbox"
+
+
+class ProjectComment(models.Model):
+    STATES = ("pending", "approved", "rejected")
+    id = models.TextField(primary_key=True)
+    submission = models.ForeignKey(Submission, on_delete=models.CASCADE, related_name="comments")
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="comments")
+    author = models.ForeignKey(Person, on_delete=models.PROTECT, related_name="comments")
+    text = models.TextField()
+    state = models.TextField(default="pending")
+    created_at = models.DateTimeField(default=timezone.now)
+    reviewed_by = models.ForeignKey(Person, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, default="")
+    audit_seq = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "project_comment"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(state__in=("pending", "approved", "rejected")),
+                name="comment_state",
+            ),
+        ]
+

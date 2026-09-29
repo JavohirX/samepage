@@ -150,8 +150,13 @@ REST_FRAMEWORK = {
     "URL_FORMAT_OVERRIDE": None,
     "EXCEPTION_HANDLER": "samepage.core.errors.exception_handler",
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
-    # Only the sign-in POST is throttled (core/throttles.py). run.py's GET routes are not.
-    "DEFAULT_THROTTLE_RATES": {"login": os.environ.get("SAMEPAGE_LOGIN_RATE", "10/min")},
+    # Only write actions are throttled (core/throttles.py). run.py's GET routes are not.
+    "DEFAULT_THROTTLE_RATES": {
+        "login": os.environ.get("SAMEPAGE_LOGIN_RATE", "10/min"),
+        "ballot": os.environ.get("SAMEPAGE_BALLOT_RATE", "30/min"),
+        "comment": os.environ.get("SAMEPAGE_COMMENT_RATE", "10/min"),
+        "magic_link": os.environ.get("SAMEPAGE_MAGIC_LINK_RATE", "5/min"),
+    },
     # 0 means the throttle keys on the TCP peer and ignores X-Forwarded-For, which a client can forge.
     # Behind one reverse proxy that sets X-Forwarded-For, set SAMEPAGE_NUM_PROXIES=1.
     "NUM_PROXIES": int(os.environ.get("SAMEPAGE_NUM_PROXIES", "0")),

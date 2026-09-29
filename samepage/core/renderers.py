@@ -37,6 +37,11 @@ NUMERIC_HINTS = {
     "loglik",
     "lean",
     "mean_total",
+    "credits",
+    "voters",
+    "influence_num",
+    "sequence_number",
+    "credits_spent",
 }
 
 

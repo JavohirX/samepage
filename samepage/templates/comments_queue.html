@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block main %}
+<header class="page">
+  <div>
+    <h1>Comments Moderation Queue</h1>
+    <p>Pre-moderation queue: comments become visible on project pages only once approved.</p>
+  </div>
+  <p class="tools">
+    <a href="{{ payload.download_csv }}">Download CSV</a>
+    <a href="{{ payload.download_json }}">JSON</a>
+  </p>
+</header>
+
+<table role="grid">
+  <thead>
+    <tr>
+      <th>Status</th>
+      <th>Project</th>
+      <th>Author</th>
+      <th>Comment Text</th>
+      <th>Submitted</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td>
+        <span class="badge {% if item.state == 'approved' %}success{% elif item.state == 'rejected' %}danger{% endif %}">
+          <data data-field="state" value="{{ item.state }}">{{ item.state }}</data>
+        </span>
+      </td>
+      <td>
+        <a href="/e/{{ event_id }}/projects/{{ item.project_id }}"><data data-field="project_title" value="{{ item.project_title }}">{{ item.project_title }}</data></a>
+        <br><small><data data-field="project_id" value="{{ item.project_id }}">{{ item.project_id }}</data></small>
+      </td>
+      <td>
+        <data data-field="author_email" value="{{ item.author_email }}">{{ item.author_email }}</data>
+      </td>
+      <td>
+        <p style="max-width: 400px; margin-bottom: 0;">{{ item.text }}</p>
+        {% if item.rejection_reason %}<small style="color: var(--pico-del-color);">Reason: {{ item.rejection_reason }}</small>{% endif %}
+      </td>
+      <td><small><data data-field="created_at" value="{{ item.created_at }}">{{ item.created_at }}</data></small></td>
+      <td>
+        {% if item.state == "pending" %}
+        <div style="display: flex; gap: 0.5rem;">
+          <form method="post" action="/e/{{ event_id }}/comments/{{ item.id }}/approve" style="margin: 0;">
+            {% csrf_token %}
+            <button type="submit" style="padding: 0.2rem 0.6rem; font-size: 0.8rem;">Approve</button>
+          </form>
+          <form method="post" action="/e/{{ event_id }}/comments/{{ item.id }}/reject" style="margin: 0;">
+            {% csrf_token %}
+            <button type="submit" class="secondary outline" style="padding: 0.2rem 0.6rem; font-size: 0.8rem;">Reject</button>
+          </form>
+        </div>
+        {% else %}
+        <small style="color: var(--pico-muted-color);">Reviewed by {{ item.reviewed_by }}</small>
+        {% endif %}
+      </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">No comments submitted yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
