@@ -15,13 +15,15 @@ docker compose up -d
 ```
 
 That's it!
-- Starts PostgreSQL 16 and Gunicorn.
+- Starts PostgreSQL 16 and Gunicorn inside an isolated Docker network.
 - Migrates the schema and installs Postgres deadline safety triggers.
 - Seeds all mock data: 41 submissions, 30 judges, 126 reviews.
-- Binds to `0.0.0.0:8080`, immediately accessible from any browser at:
+- Configured with strict container memory limits (`768MB` app, `512MB` db) to allow multiple projects to run on the same VPS without out-of-memory issues.
+- Binds to isolated port `0.0.0.0:21500` (leaving ports 80, 443, 8080, and other project ports free for other projects or reverse proxies):
   ```
-  http://<YOUR_VPS_IP>:8080
+  http://<YOUR_VPS_IP>:21500
   ```
+- **Vercel Frontend & CORS Ready**: Pre-configured with permissive CORS middleware supporting `OPTIONS` preflight, `Access-Control-Allow-Origin: *` / `https://*.vercel.app`, and CSRF bypass for JSON/Bearer requests so your Vercel frontend can call this backend API directly.
 
 ---
 
