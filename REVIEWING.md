@@ -13,8 +13,7 @@ A rubric-to-evidence map for evaluators. Every claim links to the file or comman
 | T2 CSV export | One URL, three formats through `samepage/core/views.py` | `run.py` check 7 (PASS) |
 | T1+T2 verified 7/7 | [acceptance-report.txt](acceptance-report.txt) | `python run.py .dogfood.toml` |
 | CI green on amd64 + arm64 | [receipts/ci-run.txt](receipts/ci-run.txt), 5 green jobs | [GitHub Actions](https://github.com/JavohirX/samepage/actions) |
-| T3 not claimed | `.dogfood.toml` line 5: `claimed = ["T1", "T2"]` | Built and tested but not claimed |
-| T4 not claimed | `.dogfood.toml` line 5 | Built and tested but not claimed |
+| T3 and T4 not claimed | `.dogfood.toml` line 5: `claimed = ["T1", "T2"]` | Built and tested, not claimed; table and tests in README "T3 and T4", known gaps under README Limits |
 
 ## Judging Integrity (25%)
 
@@ -22,9 +21,13 @@ A rubric-to-evidence map for evaluators. Every claim links to the file or comman
 |---|---|---|
 | Backend role isolation | `samepage/core/policy.py`: one policy table, checked before target row is loaded | `tests/test_authz_matrix.py`: every route × 7 principals × 3 formats |
 | 403 before resolving forbidden id | `samepage/services/access.py` calls `policy.allows` before any query | Try `curl -H "Authorization: Bearer <judge_b>" .../judges/jdg_08/scores.json` → 403 (not 404) |
-| Least-privilege DB role | `samepage/ops/entrypoint.py`: creates `samepage_app`, grants read/write but not UPDATE on `score_rev` or audit | `receipts/production-mode.txt` |
-| Defensible normalization | `samepage/engine/reml.py` (Woodbury REML), cross-checked by `tools/oracle_statsmodels.py` | `docker compose --profile oracle run --rm oracle` → λ and ranking match |
-| Audit trail | `samepage/services/audit.py`, append-only `audit_event` table, chain hash | `curl -H "Authorization: Bearer <organizer>" .../audit.json` |
+| Least-privilege DB role | `samepage/ops/roles.py` `ensure_app_role` (REVOKE UPDATE, DELETE on `score_rev` and `audit_event`) and `runtime_self_check` (refuses to serve otherwise), called from `samepage/ops/entrypoint.py` | `psql -U samepage_app -c "UPDATE score_rev ..."` → permission denied (README showcase 4) |
+| Defensible normalization | `samepage/engine/reml.py` (Woodbury REML), cross-checked by `tools/oracle_statsmodels.py` | `docker compose --profile oracle run --rm oracle` → λ and ranking match (README showcase 2) |
+| Audit trail | `samepage/services/audit.py`, append-only `audit_event` table (trigger in `migrations/0002_triggers.py`), hash chain | `curl -H "Authorization: Bearer <organizer>" localhost:8080/e/evt_01/audit.json` |
+| The judge who marks everything the same | jdg_07 gave 4/4/4 to every project: kept in the fit, flagged `straight_line`, its z-score refused by name ([JUDGING.md](JUDGING.md)) | Organizer → `/e/evt_01/normalization` |
+| Numbers agree across dashboard, CSV and results | The progress page renders each linked CSV and compares row counts on every request (`samepage/services/ledger.py`) | `/e/evt_01/progress` as Organizer: "6 of 6 numbers on this page match…" (README showcase 3) |
+| CSV formula injection | `samepage/domain/csvguard.py`: text cells starting with `= + - @`, tab or CR get a leading quote | `tests/test_writes.py`, `tests/test_judging_flow.py` |
+| XSS | Django autoescaping, and `Content-Security-Policy: default-src 'self'` on every response (`samepage/core/headers.py`) | `curl -sI localhost:8080/` |
 | Dry Harbour duplicate | prj_07/prj_41 in fixtures, handled as keep-latest with provisional/confirmed states | Progress page shows 5 excluded rows, all prj_07 |
 
 ## Adoptability & Operability (20%)
