@@ -1,11 +1,12 @@
 # Samepage
 
+> **This is the demo branch. The branch for judging is [`prod`](https://github.com/JavohirX/samepage/tree/prod).**
+> `main` (and `live`) carry the public demo deployment: extra pre-seeded accounts, open judging batches, community voting, and a web frontend in `frontend/` (see [VPS.md](VPS.md)). The demo defaults (port 21500, the extra seed data) differ from what the test suite and `.dogfood.toml` expect, so CI fails on this branch. The checker receipts, the green CI runs and the review docs belong to `prod`.
+
 [![CI](https://github.com/JavohirX/samepage/actions/workflows/acceptance.yml/badge.svg)](https://github.com/JavohirX/samepage/actions/workflows/acceptance.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 A self-hosted hackathon judging portal where every number on a page opens as the rows behind it, every list is also a CSV and a JSON from one policy check, and an independent statsmodels image re-derives the published ranking from the `scores.csv` an organizer downloads.
-
-> 🚀 **Live VPS Version**: This `live` branch is configured for instant deployment on any VPS or remote server with pre-seeded accounts, open judging batches, and interactive community voting. See [VPS.md](VPS.md) for 1-command deployment instructions.
 
 ### Judge this in 5 minutes
 
