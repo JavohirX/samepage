@@ -208,3 +208,10 @@ ul.plain li:last-child { border-bottom: 0; }
   .signin .form-side { padding: 1.5rem 1.25rem; }
   .criterion { grid-template-columns: 1fr; }
 }
+label.inline { display: inline-flex; align-items: center; gap: 0.5rem; margin: 0 0.5rem 0.6rem 0; white-space: nowrap; }
+label.inline input { width: 7rem; margin: 0; }
+fieldset.checks { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.6rem 0.9rem; margin: 0 0 1rem; display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
+fieldset.checks legend { font-size: 0.85rem; font-weight: 500; padding: 0 0.3rem; }
+label.check { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; font-weight: 400; }
+label.check input { width: auto; margin: 0; }
+.card .row { margin-bottom: 0.4rem; }

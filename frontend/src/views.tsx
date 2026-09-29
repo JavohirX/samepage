@@ -22,6 +22,7 @@ import type {
   Team,
 } from './lib/api';
 import { Link, navigate } from './lib/router';
+import { AssignPanel } from './settings';
 
 // ---------- Small helpers ----------
 
@@ -384,8 +385,12 @@ export function ControlPanel({ evt }: { evt: string }) {
       <p className="recount">
         {p.recount.matched} of {p.recount.total} numbers on this page match the row count of the CSV they link to (each CSV is rendered and parsed on this request).
       </p>
+      <h2>Assign</h2>
+      <AssignPanel evt={evt} onDone={progress.reload} />
       <h2>Judges</h2>
-      <p className="meta">Open work first: a judge with open assignments is behind.</p>
+      <p className="meta">
+        Open work first: a judge with open assignments is behind. <Link href={`/e/${evt}/settings`}>Invite a judge →</Link>
+      </p>
       <div className="table-wrap">
         <table>
           <thead><tr><th>Judge</th><th>Assigned</th><th>Finalized</th><th>Open</th><th>Drafts</th><th>Abandoned</th></tr></thead>

@@ -18,6 +18,7 @@ import {
   TeamView,
   Workspace,
 } from './views';
+import { SettingsView } from './settings';
 
 function rolesIn(me: Account | null, evt: string | null): string[] {
   if (!me) return [];
@@ -76,6 +77,7 @@ export function App() {
   else if (path === '/e') page = <EventsList />;
   else if (path === '/e/new') page = <NewEvent />;
   else if ((m = match('/e/:evt/progress', path))) page = <ControlPanel evt={m.evt} />;
+  else if ((m = match('/e/:evt/settings', path))) page = <SettingsView evt={m.evt} />;
   else if ((m = match('/e/:evt/results', path))) page = <ResultsView evt={m.evt} staff={staff} />;
   else if ((m = match('/e/:evt/judge/batches', path))) page = <Queue evt={m.evt} />;
   else if ((m = match('/e/:evt/judge/assignments/:prj', path))) page = <Score evt={m.evt} prj={m.prj} />;
@@ -129,6 +131,7 @@ export function App() {
               <span className="group">Control panel</span>
               <Link href={`/e/${evt}/progress`}>Progress</Link>
               <Link href={`/e/${evt}/results`}>Results</Link>
+              <Link href={`/e/${evt}/settings`}>Settings</Link>
               <span className="sep" />
             </>
           )}
