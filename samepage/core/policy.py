@@ -1,14 +1,15 @@
 """One declarative policy table for all actions and roles.
 
-Invariant: Authorization rules live strictly in this file, evaluated before any
-target database row is loaded (D11). `allows()` is pure with zero side-effects
-or database queries.
+Invariant: every role-level rule is one entry in `ACTION_POLICY`, and `allows()`
+answers from the tables alone, with no query and no side effect. `SamepageView`
+asks it (through `services/access.require`) before the target row is loaded (D11).
+Object-level rules (this team's draft, this judge's assignment) live in the services.
 
-Why: Centralized authorization matrix eliminates per-view permission drift and
-enables comprehensive combinatorial testing (`tests/test_authz_matrix.py`).
+Why: one table is one place to read, `/about/access` renders it, and
+`tests/test_authz_matrix.py` checks every route against it.
 
-Rejected alternative: Distributed view-level or object-level permission decorators,
-which make auditability difficult and risk silent authorization leaks.
+Rejected alternative: permission decorators on each view, which spread the policy
+over many files so nobody can read all of it at once.
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """Tests for event bundle import/export (S13).
 
 Strict superset of fixtures.json format.
-Round-trip export -> import -> same results hash.
+A round trip keeps every project, score, judge, track and criterion.
 """
 
 import json
@@ -19,7 +19,7 @@ pytestmark = [needs_db, pytest.mark.django_db]
 
 
 def test_roundtrip_bundle_export_import(client):
-    """Export evt_01 to bundle, import into new event evt_rt, verify identical ranking_sha256."""
+    """Export evt_01, import it as a new event, and check that every row type survives the round trip."""
     event = Event.objects.get(id="evt_01")
     # Ensure results snapshot exists
     results.rebuild(event.id)

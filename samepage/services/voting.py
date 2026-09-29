@@ -282,7 +282,7 @@ def request_magic_link(event: Event, email: str, base_url: str) -> MailOutbox:
 
     token = secrets.token_urlsafe(32)
     token_sha = hashlib.sha256(token.encode("utf-8")).hexdigest()
-    magic_url = f"{base_url.rstrip('/')}/vote/magic/{token}"
+    magic_url = f"{base_url.rstrip('/')}/vote/{token}"
     now = db_now()
 
     outbox = MailOutbox.objects.create(

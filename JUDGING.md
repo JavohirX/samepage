@@ -112,10 +112,10 @@ Empty comments are empty strings. `counted` is `true` or `false`. The file does 
 
 ## Signed Records & Judge Protocols (Package T4)
 
-When results are published, an Ed25519 keypair is generated (or loaded) for the event to cryptographically bind the final evaluation records:
+After publish, the first read of the records signs them with an Ed25519 key: the one in `SAMEPAGE_SIGNING_KEY` (PEM) if set, otherwise a key the process generates at start (README, Limits).
 
-1. **Merkle Tree over Counted Reviews**:
-   Each counted review forms a leaf in an RFC 9162 binary Merkle tree. Leaf content is canonically serialized (`v1:review:<event_id>:<judge_id>:<submission_id>:<weighted_total>:<scores_sha256>`). The Merkle root is signed with the event's Ed25519 private key.
+1. **Merkle tree over the final score rows**:
+   Each final score row (one per judge, project and criterion, `services/signing.canonical_review_row`) is a leaf of an RFC 9162 binary Merkle tree: `REVIEW|<event>|<judge>|<project>|<criterion>|<value>|<comment>`. This includes the final rows of a withdrawn duplicate (prj_07), which the ranking does not count. The root is signed with the Ed25519 key.
    - Raw statement: `GET /e/<event>/records/root.txt`
    - Detached signature: `GET /e/<event>/records/root.sig`
    - Public key (PEM): `GET /e/<event>/records/pub.pem`
@@ -125,4 +125,4 @@ When results are published, an Ed25519 keypair is generated (or loaded) for the 
    Each judge can inspect and export their personal evaluation protocol (`GET /e/<event>/judge/protocol`). The protocol contains:
    - All reviews submitted by that judge.
    - For every counted review, an RFC 9162 Merkle audit path (inclusion proof) proving that the review was included in the signed Merkle root.
-   - Cryptographic verification that no scores were altered, omitted, or tampered with between evaluation and publication.
+   - With a copy of `root.txt` and `pub.pem` kept from publish time, a judge can later show that their final scores were in the signed set. The tree is built at publish from the database, so it says nothing about changes before publish; the audit chain covers that.
