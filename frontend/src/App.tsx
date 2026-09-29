@@ -1,161 +1,162 @@
-import { useState, useEffect } from 'react';
-import { Header } from './components/Header';
-import type { TabType } from './components/Header';
-import { DEMO_PERSONAS, getEventInfo } from './lib/api';
-import type { Persona } from './lib/types';
-import { GalleryView } from './views/GalleryView';
-import { JudgeView } from './views/JudgeView';
-import { ResultsView } from './views/ResultsView';
-import { VotingView } from './views/VotingView';
-import { ProofsView } from './views/ProofsView';
-import { ProgressView } from './views/ProgressView';
-import { Shield, GitCommit, FileCode } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { DEMO_ACCOUNTS, DEMO_PASSWORD, getAccount, signIn, signOut } from './lib/api';
+import type { Account } from './lib/api';
+import { Link, match, navigate, usePath } from './lib/router';
+import {
+  AdminPanel,
+  ControlPanel,
+  EventView,
+  EventsList,
+  Gallery,
+  Lifecycle,
+  NewEvent,
+  Queue,
+  ResultsView,
+  RolePill,
+  Score,
+  SignIn,
+  TeamView,
+  Workspace,
+} from './views';
+
+function rolesIn(me: Account | null, evt: string | null): string[] {
+  if (!me) return [];
+  const roles = new Set(me.items.filter((i) => i.event_id === evt).map((i) => i.role));
+  if (me.is_admin === 'true') roles.add('admin');
+  return ['admin', 'organizer', 'judge', 'participant'].filter((r) => roles.has(r));
+}
 
 export function App() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
-    const saved = localStorage.getItem('samepage_theme');
-    if (saved === 'dark' || saved === 'light') return saved;
-    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
-  });
+  const path = usePath();
+  const [me, setMe] = useState<Account | null | undefined>(undefined);
+  const [switchError, setSwitchError] = useState('');
 
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    const hash = window.location.hash.replace('#', '') as TabType;
-    const validTabs: TabType[] = ['gallery', 'results', 'judge', 'voting', 'progress'];
-    return validTabs.includes(hash) ? hash : 'gallery';
-  });
-
-  const [currentPersona, setCurrentPersona] = useState<Persona>(DEMO_PERSONAS[0]);
-  const [apiConnected, setApiConnected] = useState(false);
-  const [eventTitle, setEventTitle] = useState('Sample Hack 2026');
-  const [proofsModalOpen, setProofsModalOpen] = useState(false);
-
-  // Sync theme with DOM and localStorage
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('samepage_theme', theme);
-  }, [theme]);
-
-  // Sync tab with URL hash
-  useEffect(() => {
-    window.location.hash = activeTab;
-  }, [activeTab]);
-
-  // Check backend health and event title on load
-  useEffect(() => {
-    getEventInfo('evt_01')
-      .then((data) => {
-        setApiConnected(true);
-        if (data.title) setEventTitle(data.title);
-      })
-      .catch(() => {
-        setApiConnected(false);
-      });
+  const refreshMe = useCallback(async () => {
+    try {
+      setMe(await getAccount());
+    } catch {
+      setMe(null);
+    }
   }, []);
+  useEffect(() => {
+    refreshMe();
+  }, [refreshMe]);
 
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
+  const landed = async (landing: string) => {
+    await refreshMe();
+    navigate(landing);
   };
-
-  const handleSelectPersona = (persona: Persona) => {
-    setCurrentPersona(persona);
-    // Smooth ergonomics: auto-navigate to relevant tab if switching to a specialized role
-    if (persona.id.startsWith('judge')) {
-      setActiveTab('judge');
-    } else if (persona.id === 'organizer') {
-      setActiveTab('progress');
-    } else if (persona.id === 'participant') {
-      setActiveTab('voting');
-    } else {
-      setActiveTab('gallery');
+  const switchTo = async (email: string, role: (typeof DEMO_ACCOUNTS)[number]['role']) => {
+    setSwitchError('');
+    try {
+      await landed(await signIn(email, DEMO_PASSWORD, role));
+    } catch (e) {
+      setSwitchError(e instanceof Error ? e.message : String(e));
     }
   };
+  const leave = async () => {
+    await signOut();
+    setMe(null);
+    navigate('/');
+  };
+
+  const found = path.match(/^\/e\/([^/]+)/);
+  const evt = found && found[1] !== 'new' ? found[1] : null;
+  const roles = rolesIn(me ?? null, evt);
+  const staff = roles.includes('admin') || roles.includes('organizer');
+  const judge = roles.includes('judge');
+  const team = me?.items.find((i) => i.event_id === evt && i.team_id)?.team_id;
+  const isAdmin = me?.is_admin === 'true';
+  const onSignIn = !me && (path === '/' || path === '/login');
+
+  let page;
+  let m: Record<string, string> | null;
+  if (me === undefined) page = <p className="meta">Loading…</p>;
+  else if (path === '/' || path === '/login') page = me ? (isAdmin ? <AdminPanel /> : <Workspace me={me} />) : <SignIn onSignedIn={landed} />;
+  else if (path === '/e') page = <EventsList />;
+  else if (path === '/e/new') page = <NewEvent />;
+  else if ((m = match('/e/:evt/progress', path))) page = <ControlPanel evt={m.evt} />;
+  else if ((m = match('/e/:evt/results', path))) page = <ResultsView evt={m.evt} staff={staff} />;
+  else if ((m = match('/e/:evt/judge/batches', path))) page = <Queue evt={m.evt} />;
+  else if ((m = match('/e/:evt/judge/assignments/:prj', path))) page = <Score evt={m.evt} prj={m.prj} />;
+  else if ((m = match('/e/:evt/teams/:team', path))) page = <TeamView evt={m.evt} team={m.team} />;
+  else if ((m = match('/e/:evt/projects', path))) page = <Gallery evt={m.evt} />;
+  else if ((m = match('/e/:evt', path))) page = <EventView evt={m.evt} />;
+  else page = <p className="banner">No page at {path}. <Link href="/">Go home</Link></p>;
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* Streamlined Header with 2 primary tabs & integrated Persona selector */}
-      <Header
-        activeTab={activeTab}
-        onSelectTab={setActiveTab}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        eventTitle={eventTitle}
-        currentPersona={currentPersona}
-        onSelectPersona={handleSelectPersona}
-        onOpenProofs={() => setProofsModalOpen(true)}
-        apiConnected={apiConnected}
-      />
-
-      {/* Main Tabbed Views Container */}
-      <div className="app-container" style={{ flex: 1, width: '100%', maxWidth: '1200px' }}>
-        <main className="main-content" role="main">
-          {activeTab === 'gallery' && <GalleryView token={currentPersona.token} />}
-          {activeTab === 'results' && <ResultsView token={currentPersona.token} />}
-          {activeTab === 'judge' && <JudgeView token={currentPersona.token} />}
-          {activeTab === 'voting' && <VotingView token={currentPersona.token} />}
-          {activeTab === 'progress' && (
-            <ProgressView token={currentPersona.token} onNavigateTab={setActiveTab} />
-          )}
-        </main>
-      </div>
-
-      {/* Cryptographic Proofs Overlay Modal */}
-      {proofsModalOpen && (
-        <ProofsView isModal onClose={() => setProofsModalOpen(false)} />
-      )}
-
-      {/* Minimalist Editorial Footer */}
-      <footer className="app-footer">
-        <div className="footer-inner">
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Samepage</span>
-              <span style={{ color: 'var(--text-tertiary)' }}>·</span>
-              <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>
-                Verifiable Peer Evaluation Engine
-              </span>
-            </div>
-            <p style={{ margin: 0, color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
-              Woodbury REML normalization, quadratic consensus voting, and RFC 9162 signed Merkle proofs.
-            </p>
-          </div>
-
-          <div className="footer-links">
-            <button
-              onClick={() => setProofsModalOpen(true)}
-              style={{
-                background: 'none',
-                border: 'none',
-                padding: 0,
-                cursor: 'pointer',
-                fontSize: '0.8125rem',
-              }}
-              className="footer-links"
-              title="Inspect Merkle root hash & Ed25519 signature"
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-secondary)' }}>
-                <Shield size={13} color="var(--success)" />
-                <span>Merkle Proofs</span>
-              </span>
+    <div className="shell">
+      {!onSignIn && (
+        <aside className="demo-strip" aria-label="Demo accounts">
+          <span className="label">Demo</span>
+          {DEMO_ACCOUNTS.map((a) => (
+            <button key={a.email} title={`${a.email}: ${a.note}`} aria-current={me?.email === a.email} onClick={() => switchTo(a.email, a.role)}>
+              {a.label}
             </button>
-
-            <a
-              href="http://193.36.236.221:21500/docs"
-              target="_blank"
-              rel="noreferrer"
-              title="FastAPI Interactive Documentation"
-            >
-              <FileCode size={13} />
-              <span>Swagger API</span>
-            </a>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: 'var(--text-tertiary)', fontSize: '0.75rem' }}>
-              <GitCommit size={13} />
-              <span className="font-mono">Ed25519 Verified</span>
-            </div>
-          </div>
+          ))}
+          {switchError && <span className="error">{switchError}</span>}
+          <span className="hint">one click switches account · password {DEMO_PASSWORD}</span>
+        </aside>
+      )}
+      <header className="top">
+        <div className="brand">
+          <Link className="home" href="/"><span className="mark" aria-hidden="true" />Samepage</Link>
+          {evt && <Link className="event-pill" href={`/e/${evt}`}>{evt}</Link>}
         </div>
+        <nav aria-label="Account">
+          {me ? (
+            <>
+              <Link href="/">{isAdmin ? 'Admin panel' : 'My workspace'}</Link>
+              <Link href="/e">Events</Link>
+              <span className="who">
+                {(evt ? roles : isAdmin ? ['admin'] : []).map((r) => <RolePill key={r} role={r} />)}
+                <span className="email">{me.email}</span>
+              </span>
+              <button onClick={leave}>Sign out</button>
+            </>
+          ) : (
+            <>
+              <Link href="/e">Events</Link>
+              {!onSignIn && <Link className="button primary" href="/">Sign in</Link>}
+            </>
+          )}
+        </nav>
+      </header>
+      {evt && (
+        <nav className="tabs" aria-label="Event">
+          {staff && (
+            <>
+              <span className="group">Control panel</span>
+              <Link href={`/e/${evt}/progress`}>Progress</Link>
+              <Link href={`/e/${evt}/results`}>Results</Link>
+              <span className="sep" />
+            </>
+          )}
+          {judge && (
+            <>
+              <span className="group">Judge</span>
+              <Link href={`/e/${evt}/judge/batches`}>Console</Link>
+              <span className="sep" />
+            </>
+          )}
+          {team && (
+            <>
+              <span className="group">My team</span>
+              <Link href={`/e/${evt}/teams/${team}`}>Team and submission</Link>
+              <span className="sep" />
+            </>
+          )}
+          <span className="group">Public</span>
+          <Link href={`/e/${evt}`}>Event</Link>
+          <Link href={`/e/${evt}/projects`}>Gallery</Link>
+          {!staff && <Link href={`/e/${evt}/results`}>Results</Link>}
+        </nav>
+      )}
+      {evt && staff && <Lifecycle evt={evt} />}
+      <main className="container">{page}</main>
+      <footer className="site">
+        <span>Samepage · every number opens as the rows behind it</span>
+        <span>HTML, JSON and CSV from one policy check</span>
       </footer>
     </div>
   );

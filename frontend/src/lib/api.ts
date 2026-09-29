@@ -1,211 +1,233 @@
-import type {
-  Persona,
-  ProjectItem,
-  ProjectDetail,
-  JudgeBatchItem,
-  AssignmentSheet,
-  ResultsPayload,
-  VotingPayload,
-  SignedRootPayload,
-  ProgressPayload,
-  AuditItem,
-} from './types';
+// The portal's JSON API. Every request goes to the same origin under /api/backend, which
+// Vercel (vercel.json) and the Vite dev server (vite.config.ts) forward to the Django app, so
+// the session cookie the backend sets on sign-in is sent back on every later call.
 
-export const DEMO_PERSONAS: Persona[] = [
-  {
-    id: 'visitor',
-    name: 'Public Visitor',
-    email: 'visitor@samepage.live',
-    roleLabel: 'Visitor',
-    description: 'Public gallery browsing, criteria inspection, cryptographic Merkle verification.',
-  },
-  {
-    id: 'organizer',
-    name: 'Marta Vance (Organizer)',
-    email: 'organizer@samepage.live',
-    roleLabel: 'Organizer',
-    token: 'sp_demo_org_6ffc79cd07cf2395bf305af7958f537287d840fb34ccd179c94cf52c4363280d',
-    description: 'Full audit logs, live progress metrics, REML normalization lab, and results publication.',
-  },
-  {
-    id: 'judge_a',
-    name: 'Marek Nowak (Judge A)',
-    email: 'judge@samepage.live',
-    roleLabel: 'Judge (Security / Trk 04)',
-    token: 'sp_demo_jdg08_db077fb394e3374f22839475b7a21522ebd009a64115c803fb6d15ed38d404ad',
-    description: 'Assigned to Batch 08. Scores Copper Orbit and Dry Bridge with weighted rubrics.',
-  },
-  {
-    id: 'judge_b',
-    name: 'Priya Nair (Judge B)',
-    email: 'priya.nair@example.org',
-    roleLabel: 'Judge (Security & Data)',
-    token: 'sp_demo_jdg03_f056283662f6dcf9d3872b94365d55317f61eeb5bbfd79a227b739372e5c07b3',
-    description: 'Assigned to Batch 03. Evaluates assigned submissions across tracks 04 and 05.',
-  },
-  {
-    id: 'participant',
-    name: 'Priya Patel (Participant)',
-    email: 'participant@samepage.live',
-    roleLabel: 'Participant (Team NorthKiln)',
-    token: 'sp_demo_priya1_f85c87c220a901c9a55d13584dd11d8b6210c2f150fec88d33d00f1464fa94df',
-    description: 'Author of "Glass Signal". Participates in community quadratic voting (25 credits budget).',
-  },
-];
+const BASE = import.meta.env.VITE_API_URL || '/api/backend';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api/backend';
-
-export async function fetchFromBackend<T = any>(
-  path: string,
-  options: RequestInit = {},
-  token?: string
-): Promise<T> {
-  const headers = new Headers(options.headers || {});
-  headers.set('Accept', 'application/json');
-
-  if (!headers.has('Content-Type') && options.method && options.method !== 'GET') {
-    headers.set('Content-Type', 'application/json');
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
   }
+}
 
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
+export function backendUrl(path: string): string {
+  return BASE + path;
+}
 
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const url = `${API_BASE}${cleanPath}`;
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      let errorMsg = `HTTP ${response.status}`;
-      try {
-        const errorJson = JSON.parse(errorText);
-        errorMsg = errorJson.detail || errorJson.title || errorMsg;
-      } catch {
-        if (errorText) errorMsg = errorText.slice(0, 100);
-      }
-      throw new Error(errorMsg);
+function problemText(body: unknown, fallback: string): string {
+  if (body && typeof body === 'object') {
+    const b = body as Record<string, unknown>;
+    if (typeof b.detail === 'string') return b.detail;
+    if (b.errors && typeof b.errors === 'object') {
+      return Object.entries(b.errors as Record<string, unknown>)
+        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(' ') : String(v)}`)
+        .join('; ');
     }
+    if (typeof b.title === 'string') return b.title;
+  }
+  return fallback;
+}
 
-    return await response.json();
-  } catch (err: any) {
-    console.warn(`[Samepage API] Request to ${cleanPath} failed:`, err.message);
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  if (init.body) headers['Content-Type'] = 'application/json';
+  const res = await fetch(BASE + path, { credentials: 'include', ...init, headers });
+  if (!res.ok) {
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    throw new ApiError(res.status, problemText(body, `${res.status} ${res.statusText}`));
+  }
+  const text = await res.text();
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
+export const get = <T>(path: string) => request<T>(path);
+export const post = <T>(path: string, body: unknown = {}) =>
+  request<T>(path, { method: 'POST', body: JSON.stringify(body) });
+
+// ---------- Accounts ----------
+
+export type Role = 'participant' | 'judge' | 'organizer' | 'admin';
+
+export interface Account {
+  id: string;
+  email: string;
+  name: string;
+  is_admin: string;
+  items: { event_id: string; event: string; role: string; team_id: string }[];
+}
+
+export async function getAccount(): Promise<Account | null> {
+  try {
+    return await get<Account>('/account.json');
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 401 || err.status === 403)) return null;
     throw err;
   }
 }
 
-// -------------------------------------------------------------
-// Live API Methods with Automatic Fallbacks
-// -------------------------------------------------------------
-
-export async function getEventInfo(eventId = 'evt_01') {
-  return fetchFromBackend(`/e/${eventId}.json`);
+function decodeHtml(text: string): string {
+  const el = document.createElement('textarea');
+  el.innerHTML = text;
+  return el.value;
 }
 
-export async function getProjects(eventId = 'evt_01'): Promise<{ items: ProjectItem[]; count: number; tracks: Array<{ id: string; name: string }> }> {
-  return fetchFromBackend(`/e/${eventId}/projects.json`);
+/** Signs in with the backend's own /login. It answers 303 to the role's landing page, which
+ * fetch follows, so the final URL's path is where this role lands. */
+export async function signIn(email: string, password: string, role: Role): Promise<string> {
+  const res = await fetch(BASE + '/login', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'text/html' },
+    body: JSON.stringify({ email, password, role }),
+  });
+  if (res.status === 401 || res.status === 403 || res.status === 429) {
+    const html = await res.text();
+    const found = html.match(/role="alert">([^<]*)</);
+    const fallback = res.status === 429 ? 'Too many attempts; wait a minute.' : 'Those credentials were refused.';
+    throw new ApiError(res.status, found ? decodeHtml(found[1]) : fallback);
+  }
+  if (!res.ok && !res.redirected) throw new ApiError(res.status, `Sign-in failed (${res.status}).`);
+  if (!res.redirected) return '/';
+  const landing = new URL(res.url).pathname;
+  return landing.startsWith(BASE) ? landing.slice(BASE.length) || '/' : landing;
 }
 
-export async function getProjectDetail(projectId: string, eventId = 'evt_01', token?: string): Promise<ProjectDetail> {
-  const data = await fetchFromBackend(`/e/${eventId}/projects/${projectId}.json`, {}, token);
-  return {
-    ...data.item,
-    answers: data.answers || [],
-    media: data.media || [],
-    comments: data.comments || [],
-    can_edit: data.can_edit,
-    can_withdraw: data.can_withdraw,
+export async function signOut(): Promise<void> {
+  await fetch(BASE + '/logout', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+}
+
+// ---------- Payloads ----------
+
+export interface EventRow {
+  id: string;
+  name: string;
+  state: string;
+  submissions_close: string;
+  your_roles: string;
+  your_team: string;
+}
+
+export interface EventDetail {
+  id: string;
+  name: string;
+  description: string;
+  state: string;
+  submissions_close: string;
+  submissions_open: string;
+  max_team_size: number;
+  tracks: { id: string; name: string }[];
+  prizes: { id: string; name: string }[];
+  next_states?: string[];
+}
+
+export interface Progress {
+  sentence: {
+    counted: number;
+    excluded: number;
+    total: number;
+    fully_reviewed: number;
+    active: number;
+    short: number;
+    withdrawn_duplicate: number;
   };
+  metrics: { key: string; value: number; label: string; href: string; csv_rows: number; matches_csv: string }[];
+  recount: { matched: number; total: number };
+  provisional: string[];
+  batches: { id: string; judge_id: string; judge: string; state: string; completed: number; assigned: number; stalled: string }[];
+  judges: { judge_id: string; name: string; assigned: number; finalized: number; open: number; drafts: number; abandoned: number; behind: string }[];
+  download_csv: string;
 }
 
-export async function getCriteria(eventId = 'evt_01') {
-  return fetchFromBackend(`/e/${eventId}/criteria.json`);
+export interface ResultRow {
+  id: string;
+  title: string;
+  rank: number;
+  rank_lo: number;
+  rank_hi: number;
+  adjusted: string;
+  raw_mean: string;
+  raptors_k10: string;
+  n_reviews: number;
+  track: string;
+  flags: string;
 }
 
-export async function getJudgeBatches(eventId = 'evt_01', token?: string): Promise<{ items: JudgeBatchItem[]; count: number }> {
-  return fetchFromBackend(`/e/${eventId}/judge/batches.json`, {}, token);
+export interface Results {
+  method: string;
+  lambda: number | null;
+  banner: string;
+  story: string;
+  items: ResultRow[];
+  published: boolean;
+  published_at: string;
+  open_duplicates: string[];
+  download_csv: string;
 }
 
-export async function getJudgeAssignment(projectId: string, eventId = 'evt_01', token?: string): Promise<AssignmentSheet> {
-  return fetchFromBackend(`/e/${eventId}/judge/assignments/${projectId}.json`, {}, token);
+export interface QueueItem {
+  project_id: string;
+  title: string;
+  track: string;
+  batch_state: string;
+  status: string;
 }
 
-export async function saveJudgeScores(
-  projectId: string,
-  scores: Record<string, number>,
-  comment: string,
-  token: string,
-  eventId = 'evt_01'
-) {
-  return fetchFromBackend(
-    `/e/${eventId}/judge/assignments/${projectId}/scores.json`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ scores, comment }),
-    },
-    token
-  );
+export interface Assignment {
+  title: string;
+  project_id: string;
+  tagline: string;
+  description: string;
+  repo_url: string;
+  live_url: string;
+  video_url: string;
+  track: string;
+  criteria: { key: string; label: string; value: string | number }[];
+  comment: string;
+  state: string;
+  finalized: boolean;
+  judging_ends: string;
 }
 
-export async function finalizeJudgeAssignment(
-  projectId: string,
-  token: string,
-  eventId = 'evt_01'
-) {
-  return fetchFromBackend(
-    `/e/${eventId}/judge/assignments/${projectId}/finalize.json`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ confirm: true }),
-    },
-    token
-  );
+export interface Team {
+  id: string;
+  name: string;
+  members: { person_id: string; name: string; email: string }[];
+  max_team_size: number;
+  submission: { id: string; title: string; state: string } | null;
+  closed: string;
 }
 
-export async function getResults(eventId = 'evt_01', token?: string): Promise<ResultsPayload> {
-  return fetchFromBackend(`/e/${eventId}/results.json`, {}, token);
+export interface Project {
+  id: string;
+  title: string;
+  tagline: string;
+  track: string;
+  track_name: string;
+  team_name?: string;
+  state: string;
+  repo_url: string;
+  n_reviews: number;
 }
 
-export async function getVoting(eventId = 'evt_01', token?: string): Promise<VotingPayload> {
-  return fetchFromBackend(`/e/${eventId}/voting.json`, {}, token);
-}
+export const DEMO_ACCOUNTS: { label: string; email: string; role: Role; note: string }[] = [
+  { label: 'Admin', email: 'admin@example.org', role: 'admin', note: "Creates events; every event's control panel" },
+  { label: 'Organizer', email: 'organizer@example.org', role: 'organizer', note: 'Runs evt_01: progress, judges, results' },
+  { label: 'Judge A', email: 'marek.nowak@example.org', role: 'judge', note: 'Two open reviews in the console' },
+  { label: 'Judge B', email: 'priya.nair@example.org', role: 'judge', note: "Try Judge A's scores: refused with 403" },
+  { label: 'Participant', email: 'priya1@example.org', role: 'participant', note: 'On a team in evt_01, which is closed' },
+  { label: 'Participant (open event)', email: 'control@example.org', role: 'participant', note: 'evt_02 takes submissions' },
+];
 
-export async function castVote(
-  lines: Array<{ submission_id: string; credits: number }>,
-  token: string,
-  eventId = 'evt_01'
-) {
-  return fetchFromBackend(
-    `/e/${eventId}/voting.json`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ lines }),
-    },
-    token
-  );
-}
-
-export async function getSignedRoot(eventId = 'evt_01'): Promise<SignedRootPayload> {
-  return fetchFromBackend(`/e/${eventId}/records/root.json`);
-}
-
-export async function getProgress(eventId = 'evt_01', token?: string): Promise<ProgressPayload> {
-  return fetchFromBackend(`/e/${eventId}/progress.json`, {}, token);
-}
-
-export async function getAuditEvents(eventId = 'evt_01', token?: string): Promise<{ items: AuditItem[] }> {
-  return fetchFromBackend(`/e/${eventId}/audit.json`, {}, token);
-}
-
-export function getCertificateUrl(teamId: string, eventId = 'evt_01'): string {
-  return `${API_BASE}/e/${eventId}/teams/${teamId}/certificate.svg`;
-}
-
-export function getScoresCsvUrl(eventId = 'evt_01'): string {
-  return `${API_BASE}/e/${eventId}/scores.csv`;
-}
+export const DEMO_PASSWORD = 'samepage-demo';

@@ -1,16 +1,12 @@
 {
-  "framework": null,
-  "installCommand": "echo no install",
-  "buildCommand": "mkdir -p proxy && echo samepage > proxy/.proxy",
-  "outputDirectory": "proxy",
   "rewrites": [
     {
       "source": "/api/backend/:path*",
       "destination": "http://193.36.236.221:21500/:path*"
     },
     {
-      "source": "/:path*",
-      "destination": "http://193.36.236.221:21500/:path*"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
