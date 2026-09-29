@@ -325,9 +325,11 @@ def _demo_batches(fixture: dict) -> None:
 
 
 def _demo_interactive_data(fixture: dict) -> None:
-    """Pre-seed live interactive elements: community voting and project comments."""
-    from samepage.apps.portal.models import ProjectComment, VotingConfig
+    """Pre-seed live interactive elements: voting ballots, comments, signed records, certificates, and webhooks."""
+    from samepage.apps.portal.models import Ballot, BallotLine, ProjectComment, VotingConfig, WebhookEndpoint
     from samepage.services.clock import db_now
+    from samepage.services.signing import generate_signed_records
+    from samepage.services.certificates import issue_certificates
 
     evt_01 = Event.objects.filter(id="evt_01").first()
     if not evt_01:
@@ -346,33 +348,91 @@ def _demo_interactive_data(fixture: dict) -> None:
         },
     )
 
-    # 2. Pre-seed comments on prj_01 for moderation demonstration
-    prj_01 = Submission.objects.filter(id="prj_01").first()
-    author = Person.objects.filter(id="per_control").first() or Person.objects.first()
-    if prj_01 and author:
-        now = db_now()
-        ProjectComment.objects.get_or_create(
-            id="cmt_demo_01",
-            defaults={
-                "event": evt_01,
-                "submission": prj_01,
-                "author": author,
-                "text": "Excellent offline-first architecture and transparent audit trails!",
-                "state": "approved",
-                "created_at": now,
-            },
+    # 2. Pre-seed quadratic ballots so tally is populated
+    priya = Person.objects.filter(email="priya1@example.org").first()
+    control = Person.objects.filter(email="control@example.org").first()
+    now = db_now()
+
+    if priya and not Ballot.objects.filter(event=evt_01, person=priya).exists():
+        b1 = Ballot.objects.create(
+            id="bal_demo_01",
+            event=evt_01,
+            voter_type="account",
+            person=priya,
+            sequence_number=1,
+            channel="participants",
+            credits_spent=25,
+            client_ip="127.0.0.1",
+            created_at=now,
         )
-        ProjectComment.objects.get_or_create(
-            id="cmt_demo_02",
-            defaults={
-                "event": evt_01,
-                "submission": prj_01,
-                "author": author,
-                "text": "How does the profile REML formulation compare to ordinary OLS on sparse data?",
-                "state": "pending",
-                "created_at": now,
-            },
+        BallotLine.objects.create(ballot=b1, submission_id="prj_01", credits=4)
+        BallotLine.objects.create(ballot=b1, submission_id="prj_11", credits=3)
+
+    if control and not Ballot.objects.filter(event=evt_01, person=control).exists():
+        b2 = Ballot.objects.create(
+            id="bal_demo_02",
+            event=evt_01,
+            voter_type="account",
+            person=control,
+            sequence_number=2,
+            channel="public",
+            credits_spent=25,
+            client_ip="127.0.0.1",
+            created_at=now,
         )
+        BallotLine.objects.create(ballot=b2, submission_id="prj_10", credits=3)
+        BallotLine.objects.create(ballot=b2, submission_id="prj_25", credits=4)
+
+    # 3. Pre-seed multi-project comments for moderation queue demonstration
+    author = control or Person.objects.first()
+    comments_to_seed = [
+        ("cmt_demo_01", "prj_01", "Excellent offline-first architecture and transparent audit trails!", "approved"),
+        ("cmt_demo_02", "prj_01", "How does the profile REML formulation compare to ordinary OLS on sparse data?", "pending"),
+        ("cmt_demo_03", "prj_11", "Very clean distributed consensus algorithm and reproducible benchmarks.", "approved"),
+        ("cmt_demo_04", "prj_11", "Are the cryptographic signatures verifiable offline without external CA?", "pending"),
+        ("cmt_demo_05", "prj_34", "High-performance data pipeline with impressive latency reduction.", "pending"),
+    ]
+    for cid, pid, text, state in comments_to_seed:
+        sub = Submission.objects.filter(id=pid).first()
+        if sub and author:
+            ProjectComment.objects.get_or_create(
+                id=cid,
+                defaults={
+                    "event": evt_01,
+                    "submission": sub,
+                    "author": author,
+                    "text": text,
+                    "state": state,
+                    "created_at": now,
+                },
+            )
+
+    # 4. Generate RFC 9162 Merkle tree and Ed25519 signed root
+    try:
+        generate_signed_records(evt_01)
+    except Exception:
+        pass
+
+    # 5. Issue cryptographic SVG award certificates
+    try:
+        issue_certificates(evt_01)
+    except Exception:
+        pass
+
+    # 6. Register a demo webhook endpoint for webhooks demonstration
+    try:
+        if not WebhookEndpoint.objects.filter(event=evt_01).exists():
+            WebhookEndpoint.objects.create(
+                id="whep_demo_01",
+                event=evt_01,
+                url="https://webhook.site/samepage-demo-listener",
+                secret="whsec_demo_secret_key_for_testing_purposes_only",
+                is_active=True,
+                created_at=now,
+            )
+    except Exception:
+        pass
+
 
 
 def banner(port: int = 8080) -> str:

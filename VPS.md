@@ -25,6 +25,17 @@ That's it!
 
 ---
 
+## 1.1 First-Open Disclaimer Note & Login Modal
+
+When anyone opens the portal for the first time in their browser session, a helpful dialog automatically appears with:
+- **Production Security Disclaimer**: Explains that in a real production environment, demo role-switching, public credentials, and mock fixtures are disabled.
+- **Pre-Seeded Test Credentials**: Direct list of organizer, judge, participant, and admin emails with password `samepage-demo`.
+- **Quick Interactive Feature Checklist**: Direct links to the Judge Console, Quadratic Voting, Moderation Queue, Normalization Lab, and Swagger Docs.
+
+Evaluators can re-open this dialog at any time by clicking the blue **ℹ️ Hackathon Test Note** button in the top brand header, or the **ℹ️ Logins & Info** button on the live switch bar.
+
+---
+
 ## 2. Prebuilt Test Accounts
 
 Every account has the password: **`samepage-demo`**

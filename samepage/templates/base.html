@@ -16,6 +16,7 @@
     <div class="brand">
       <a href="/">Samepage</a>
       <span>every number opens as its rows</span>
+      <button type="button" id="open-note-modal-btn" style="margin-left: 0.75rem; padding: 0.25rem 0.6rem; font-size: 0.8rem; background: #2563eb; color: #fff; border: 1px solid #1d4ed8; border-radius: 4px; cursor: pointer; font-weight: 600;">ℹ️ Hackathon Test Note</button>
     </div>
     <nav>
       {% if event_id %}
@@ -53,6 +54,7 @@
     <form method="post" action="/demo/enter/live_part">{% csrf_token %}<button type="submit" class="outline">Participant</button></form>
     <form method="post" action="/demo/enter/control">{% csrf_token %}<button type="submit" class="outline">Participant (Open)</button></form>
     <form method="post" action="/demo/enter/live_admin">{% csrf_token %}<button type="submit" class="outline">Admin</button></form>
+    <button type="button" id="open-note-modal-btn-demo" class="contrast" style="padding: 0.2rem 0.5rem; font-size: 0.8rem; margin: 0; background: #3b82f6; border: none; color: #fff; cursor: pointer; border-radius: 4px;">ℹ️ Logins & Info</button>
     <span>PW: <code>samepage-demo</code></span>
     {% if me %}<em>signed in as {{ me.email }}</em>{% endif %}
   </aside>
@@ -60,9 +62,129 @@
   <main class="container">
     {% block main %}{% endblock %}
   </main>
+
+  <dialog id="hackathon-note-modal">
+    <article style="max-width: 760px; text-align: left; padding: 1.5rem; border-radius: 8px;">
+      <header style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #cbd5e1; margin-bottom: 1rem; padding-bottom: 0.5rem;">
+        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">ℹ️ Hackathon Evaluation Disclaimer & Test Credentials</h3>
+        <button type="button" id="close-note-modal-btn" aria-label="Close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #64748b; line-height: 1;">✕</button>
+      </header>
+
+      <div style="background: #eff6ff; border-left: 4px solid #3b82f6; padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 4px; font-size: 0.95rem; color: #1e3a8a;">
+        <strong>Production Security Notice:</strong> In a real production deployment, demo role-switching buttons, public test credentials, and hardcoded fixtures are strictly disabled (enforcing verified email invitations, strong PBKDF2 password hashing, and least-privilege database role isolation). This environment is configured specifically for <strong>DOGFOOD 2026 hackathon evaluation</strong> so judges and evaluators can immediately explore and test every role and capability.
+      </div>
+
+      <h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">🔑 Pre-Seeded Test Accounts</h4>
+      <p style="margin-bottom: 0.5rem; font-size: 0.9rem;">All accounts share the password: <strong style="color: #2563eb; background: #e0e7ff; padding: 0.1rem 0.4rem; border-radius: 3px;">samepage-demo</strong>. You can also use the 1-click switch bar at the top of every page.</p>
+      
+      <div style="overflow-x: auto; margin-bottom: 1rem;">
+        <table style="font-size: 0.85rem; width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="background: #f8fafc; text-align: left;">
+              <th style="padding: 0.4rem;">Role</th>
+              <th style="padding: 0.4rem;">Login Email</th>
+              <th style="padding: 0.4rem;">What's Ready to Test</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 0.4rem;"><strong>👑 Organizer</strong></td>
+              <td style="padding: 0.4rem;"><code>organizer@samepage.live</code></td>
+              <td style="padding: 0.4rem;">Live progress dashboard, batch matcher, comment moderation queue, normalization lab</td>
+            </tr>
+            <tr>
+              <td style="padding: 0.4rem;"><strong>⚖️ Judge (Console)</strong></td>
+              <td style="padding: 0.4rem;"><code>judge@samepage.live</code></td>
+              <td style="padding: 0.4rem;">Has active assignments ready in the Judge Console (<a href="/e/evt_01/judge/batches">/judge/batches</a>) to grade & finalize</td>
+            </tr>
+            <tr>
+              <td style="padding: 0.4rem;"><strong>⚖️ Judge A / Judge B</strong></td>
+              <td style="padding: 0.4rem;"><code>marek.nowak@example.org</code> / <code>priya.nair@example.org</code></td>
+              <td style="padding: 0.4rem;">Fixture judges with individual scoring assignments and track filters</td>
+            </tr>
+            <tr>
+              <td style="padding: 0.4rem;"><strong>🚀 Participant</strong></td>
+              <td style="padding: 0.4rem;"><code>participant@samepage.live</code> (or <code>priya1@example.org</code>)</td>
+              <td style="padding: 0.4rem;">Team NorthKiln ("Glass Signal"), view team details, invite links, feedback packs</td>
+            </tr>
+            <tr>
+              <td style="padding: 0.4rem;"><strong>🚀 Participant (Open)</strong></td>
+              <td style="padding: 0.4rem;"><code>control@example.org</code></td>
+              <td style="padding: 0.4rem;">Event <code>evt_02</code> (deadline 2027); draft, edit, upload media, and submit projects</td>
+            </tr>
+            <tr>
+              <td style="padding: 0.4rem;"><strong>🛠️ Admin</strong></td>
+              <td style="padding: 0.4rem;"><code>admin@samepage.live</code></td>
+              <td style="padding: 0.4rem;">Global system administrator; create new hackathon events and manage portal</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size: 0.85rem; color: #64748b; margin-top: -0.5rem; margin-bottom: 1rem;"><em>Note: All 30 fixture judges (<code>jdg_01</code> through <code>jdg_30</code>) can also log in with password <code>samepage-demo</code>.</em></p>
+
+      <h4 style="margin-top: 1rem; margin-bottom: 0.5rem;">🌟 Explore the Full Power of Samepage</h4>
+      <ul style="font-size: 0.88rem; line-height: 1.5; padding-left: 1.2rem; margin-bottom: 1.2rem;">
+        <li><strong>Interactive Judge Console:</strong> Switch to Judge and visit <a href="/e/evt_01/judge/batches">Judge Console</a> to grade projects with live criterion sliders, leave comments, and click <em>Finalize review</em>.</li>
+        <li><strong>Community Quadratic Voting:</strong> Visit <a href="/e/evt_01/voting">Live Voting</a> to allocate credits (budget 25, $\sum \text{credits}^2 \le 25$) and check <a href="/e/evt_01/tally">Community Tally</a>.</li>
+        <li><strong>Comment Moderation Queue:</strong> Switch to Organizer and visit <a href="/e/evt_01/comments">Comments Queue</a> to approve or reject pending community comments.</li>
+        <li><strong>Live Progress & Row Verification:</strong> Visit <a href="/e/evt_01/progress">Organizer Progress</a> where every aggregate metric links to its exact CSV rows and recounts dynamically.</li>
+        <li><strong>Normalization Lab:</strong> Open <a href="/e/evt_01/normalization">Lab</a> to compare raw means vs. z-scores vs. Woodbury REML vs. Raptors k=10 shrinkage.</li>
+        <li><strong>Vector SVG Certificates:</strong> Open <a href="/e/evt_01/teams/tm_01/certificate.svg" target="_blank">Team Certificate</a> to see standalone SVGs with embedded Ed25519 signatures.</li>
+        <li><strong>Interactive Swagger API:</strong> Browse full OpenAPI 3.0 interactive docs at <a href="/docs" target="_blank">/docs</a>.</li>
+      </ul>
+
+      <footer style="margin-top: 1rem; border-top: 1px solid #cbd5e1; padding-top: 0.75rem;">
+        <button type="button" id="got-it-btn" style="width: 100%; font-weight: 600; padding: 0.6rem; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Got it, let's explore Samepage! 🚀</button>
+      </footer>
+    </article>
+  </dialog>
+
   <footer class="site">
     <span>Samepage</span>
     <span>HTML, JSON and CSV from one policy check</span>
   </footer>
+
+  <script>
+  document.addEventListener("DOMContentLoaded", function() {
+    var modal = document.getElementById("hackathon-note-modal");
+    var openBtn1 = document.getElementById("open-note-modal-btn");
+    var openBtn2 = document.getElementById("open-note-modal-btn-demo");
+    var closeBtn = document.getElementById("close-note-modal-btn");
+    var gotItBtn = document.getElementById("got-it-btn");
+
+    function showNoteModal() {
+      if (!modal) return;
+      if (typeof modal.showModal === "function") {
+        modal.showModal();
+      } else {
+        modal.setAttribute("open", "true");
+      }
+    }
+
+    function hideNoteModal() {
+      if (!modal) return;
+      if (typeof modal.close === "function") {
+        modal.close();
+      } else {
+        modal.removeAttribute("open");
+      }
+      try { sessionStorage.setItem("samepage_test_note_seen", "1"); } catch(e) {}
+    }
+
+    if (openBtn1) openBtn1.addEventListener("click", showNoteModal);
+    if (openBtn2) openBtn2.addEventListener("click", showNoteModal);
+    if (closeBtn) closeBtn.addEventListener("click", hideNoteModal);
+    if (gotItBtn) gotItBtn.addEventListener("click", hideNoteModal);
+
+    // Auto-open on first page load in this browser session
+    try {
+      if (!sessionStorage.getItem("samepage_test_note_seen")) {
+        showNoteModal();
+      }
+    } catch(e) {
+      showNoteModal();
+    }
+  });
+  </script>
 </body>
 </html>
