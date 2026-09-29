@@ -20,7 +20,7 @@ The weighted total is Σ wᵢ vᵢ / Σ wᵢ with every weight positive, compute
 
 A review counts when every criterion's current score is **final** and the project is active (or merged into an active project). A draft autosave, and a final score an organizer has reopened (unlocked), are in `scores.csv` with `counted=false` and `excluded_reason` `not_final:draft` or `not_final:unlocked`, and they are not in the fit. A judge finalizes from the console; a final score changes only after an organizer unlocks it (`POST /e/<event>/assignments/<judge>/<project>/unlock`, audited, and the database refuses any other way).
 
-Each results snapshot records a fingerprint of its inputs: the counted reviews with their weights, the projects being ranked and the event's judges. Before publish, a read of the results or the lab whose fingerprint no longer matches refits first, so a new finalized score, a weight change or a duplicate decision is in the next page anyone sees. Publish refits if needed and stamps that snapshot; from then on every reader, signed in or not, gets exactly it, and the write paths that feed the ranking (scores, unlocks, weights, duplicate decisions, assignment runs, abandoning a batch) answer 409.
+Each results snapshot records a fingerprint of its inputs: the counted reviews with their weights, the projects being ranked and the event's judges. Before publish, a read of the results or the lab whose fingerprint no longer matches refits first, so a new finalized score, a weight change or a duplicate decision is in the next page anyone sees. Publish refits if needed and stamps that snapshot; from then on every reader, signed in or not, gets exactly it, and every write that could change the ranking answers 409: scores, unlocks, weights and other event settings, duplicate decisions, issuing batches, top-ups, manual assignments, abandoning a batch, judge invitations and withdrawals. A dry run still works after publish, because it issues nothing.
 
 ## The grid is part of the method
 
@@ -50,7 +50,7 @@ On that set the engine reports:
 - prj_41 (the kept Dry Harbour) at rank 9
 - eight projects with fewer than three counted reviews: prj_10, prj_15, prj_18, prj_19, prj_24, prj_29, prj_39, prj_40
 
-Switching the duplicate to merge retargets prj_07's five reviews onto prj_41, so three judges are in that project twice. The duplicates page prints the rank that fit produces. It is a preview, computed by the same function, not a stored slogan.
+Switching the duplicate to merge retargets prj_07's five reviews onto prj_41, so three judges are in that project twice. The duplicates page prints the rank that fit produces (17 on the fixture, against 9 for keep-latest). It is a preview, computed by the same function, not a stored slogan.
 
 ## When the model cannot be fitted
 
@@ -62,7 +62,7 @@ The results then say `method raw_fallback`. Each project's score is the mean of 
 
 - **Raw mean.** The fraction mean of counted weighted totals.
 - **Raptors k=10.** (n · raw + 10 · grand) / (n + 10), where grand is the mean of all counted weighted totals. This implements the Code Olympics formula. It does not claim to reproduce every published digit from that event.
-- **Z-scores.** Per judge, (y − mean) / sd. Undefined when n < 2 or sd = 0. On this fixture that includes jdg_07 (4/4/4 on everything, sd 0) and the one-score judges (jdg_23; jdg_01 once merge counts its one Dry Harbour review). The lab shows z as a refused method, with the failure table as the reason. It is not the published ranking. Nothing divides by a zero standard deviation: the REML fit never uses a per-judge sd, and a judge with one review keeps most of their lean in the noise term.
+- **Z-scores.** Per judge, (y − mean) / sd of the weighted totals. Undefined when n < 2 or sd = 0. On this fixture that is four judges: jdg_07 (4/4/4 on everything) and jdg_19 (three different reviews that all total 11/3) have sd 0, and jdg_12 and jdg_23 have one counted review each (jdg_01 would join them if merge counted its one Dry Harbour review). The lab shows z as a refused method, with the failure table as the reason. It is not the published ranking. Nothing divides by a zero standard deviation: the REML fit never uses a per-judge sd, and a judge with one review keeps most of their lean in the noise term.
 
 ## Judge leans
 
@@ -78,7 +78,7 @@ The lab lists judge flags from the counted reviews. Nothing flagged is dropped. 
 
 ## Uncertainty
 
-4,000 draws of a ~ N(â, σ̂² (Xᵀ H⁻¹ X)⁻¹), conditional on λ̂. The page says the uncertainty in λ is ignored. It reports a 90% rank interval and P(top-5). The banner names the lowest rank whose project still has P(top-5) ≥ 0.10. On this fixture that band is wide: no top-5 slot is settled.
+4,000 draws of a ~ N(â, σ̂² (Xᵀ H⁻¹ X)⁻¹), conditional on λ̂. The page says the uncertainty in λ is ignored. It reports a 90% rank interval and P(top-5). The banner names the lowest rank whose project still has P(top-5) ≥ 0.10. On this fixture that band is wide, ranks 1 to 15: no top-5 slot is settled.
 
 Leave-one-judge-out refits the grid once per counted judge (29 on the fixture) and names the judges whose removal changes the top-5 set.
 
@@ -94,13 +94,15 @@ Leave-one-judge-out refits the grid once per counted judge (29 on the fixture) a
 Issuing batches, the dry run and top-up use the same matcher: repeated maximum bipartite matchings. An edge exists only when the judge is eligible for the track, has no conflict of interest, has not already reviewed the project, and is under the load cap. Each round uses a judge at most once. Projects and judges are sorted by id before the seeded shuffle, so the same inputs and seed issue the same pairs.
 
 - **Issue batches** (`kind=initial`): every submitted project gets reviewers until it has `coverage` (default 3), counting assignments that already exist; `cap` (default 12) is the most any judge carries. Drafts and withdrawn projects are never assigned.
-- **Top up** (`kind=topup`): projects with fewer than three active assignments get one more reviewer each, at most one extra per judge. Unfinished assignments in an abandoned batch do not count, so that work goes to someone else, and the judge of an abandoned batch gets no new work from a run.
+- **Top up** (`kind=topup`): projects with fewer than three active assignments get reviewers until they have three, with each judge taking at most one new project per top-up (run it again for more). Unfinished assignments in an abandoned batch do not count, so that work goes to someone else, and the judge of an abandoned batch gets no new work from any run.
 - **Assign one** (`POST /e/<event>/assignments.json {judge, project}`): the same rules, checked one by one: 409 for another track, a conflict of interest, a project that is not submitted, or a pair that exists.
-- **Dry run**: a fresh design that ignores existing reviews and issues nothing.
+- **Dry run**: a fresh design that ignores existing reviews and issues nothing (`cap` and `coverage` as for issuing).
 
-Judges are invited by email on the settings page with the tracks they judge (none ticked means all). A new address gets an account and a one-time set-password link. An address that already has an account gets a one-time acceptance link instead, and becomes a judge only when that account, signed in, accepts it: anyone can sign up with any address, so an existing account is not proof of who holds it. Until then the people list shows the invitation as not accepted, and the matcher does not see them. 'Judging ends', if set, is enforced: after it, saving and finalizing a score answer 409 until an organizer moves it later. The judging context is track-scoped: a judge is assigned, opens in the console, and scores only projects in their tracks, and reads only their own scores. The public gallery stays public to everyone, judges included.
+Judges are invited by email on the settings page with the tracks they judge (none ticked means every track the event has at that moment; tracks added later are not included). A new address gets an account with the role and a one-time set-password link, and so does an existing account that has never had a password and holds no role or team anywhere, because only that link can ever sign it in. Any other existing account gets a one-time acceptance link instead, and becomes a judge only when that account, signed in, accepts it: anyone can sign up with any address, so an existing account is not proof of who holds it. Until then the people list shows the invitation as not accepted, and the matcher does not see them. 'Judging ends', if set, is enforced: after it, saving and finalizing a score answer 409 until an organizer moves it later. The judging context is track-scoped: a judge is assigned, opens in the console, and scores only projects in their tracks, and reads only their own scores. The public gallery stays public to everyone, judges included.
 
-The run report prints the load histogram, coverage, component count, articulation judges, the seed, the number of assigned pairs that break a conflict rule (measured from the pairs, not assumed), and a hand-checkable lower bound: a track with 6 projects and 3 eligible judges needs someone at load at least 6 for coverage 3, and a connected design needs at least 7. When the reviews do not divide evenly among the eligible judges, the connected bound equals the first bound, because a judge below it can take the bridging review. Dry runs and top-ups are written to the audit chain. The imported fixture is not that design. It is the fixture's own reviews, max load 11, and we do not invent a batch history for it. The dry-run button computes a fresh design without issuing it.
+Every run has a page (`/e/<event>/assignment-runs/<id>`, also JSON and CSV) with its seed, its number of pairs and the number of those pairs that break a conflict rule, measured from the pairs, not assumed. Issued runs, top-ups and dry runs also show the achieved max load and how many projects reached coverage, and their JSON has the load histogram. A dry run also shows the component count, the articulation judges and a hand-checkable lower bound: a track with 6 projects and 3 eligible judges needs someone at load at least 6 for coverage 3, and a connected design needs at least 7. When the reviews do not divide evenly among the eligible judges, the connected bound equals the first bound, because a judge below it can take the bridging review. Every run, dry runs included, is written to the audit chain.
+
+The matcher spreads load (each round uses a judge at most once, under the cap); it does not try to connect tracks. With the fixture's judges and tracks, a dry run reaches max load 6 in 8 components, one per track, and the page says so. The imported fixture is not that design: it is the fixture's own reviews, max load 11, and we do not invent a batch history for it.
 
 ## Scores CSV
 
