@@ -18,3 +18,6 @@
 | D14 | Results refit on read when their inputs changed, not on every write. | A full fit with leave-one-judge-out takes seconds; a judge finalizing 30 projects should not wait for 30 of them. The fingerprint makes staleness impossible to miss. |
 | D15 | Publish freezes the inputs, not just the page. | A frozen page over mutable scores would disagree with `scores.csv`. Every write that feeds the ranking answers 409 after publish. |
 | D16 | Invite and password links are shown once and never emailed. | The portal runs offline. Only the sha256 is stored, like bearer tokens. |
+| D17 | A judge or organizer role offered to an account that is already in use waits for that account to accept it. | Anyone can sign up with any address, so an existing account is not proof of who holds it. A brand-new account gets the role at once, because only its set-password link can sign it in. |
+| D18 | When the judge-bias model cannot be fitted, rank by the mean weighted total and say so. | A λ picked from rounding noise would look like a result. The fallback still honours the organizer's weights, and the page names the method and the reason. |
+| D19 | Only global admins create events; an admin becomes the new event's first organizer. | Event creation is rare and grants a role; organizers of one event should not be able to mint others. |
