@@ -79,6 +79,15 @@ Also in the schema: `samepage_cache` (the sign-in throttle's counter, migration 
 
 ## Import and export
 
-- Import: `services/seed.py` loads `fixtures.json` in demo mode only, through the same tables and the same deadline trigger (judged on each row's own `submitted_at`). There is no import route for other data.
-- Export: every list is also CSV and JSON on the same URL with a suffix (`/e/evt_01/scores.csv`, `/e/evt_01/projects.json`, …). CSV text cells that start with `= + - @`, a tab or a carriage return get a leading quote; numeric columns do not; empty values are empty, never `null`.
+- Import: `services/seed.py` loads `fixtures.json` in demo mode. In production, `POST /e/import.json` (admin only) accepts portable event bundles (a strict superset of `fixtures.json`), validating the schema, mapping foreign keys and slugs, detecting duplicates, and executing inside an atomic transaction.
+- Export: every list is also CSV and JSON on the same URL with a suffix (`/e/evt_01/scores.csv`, `/e/evt_01/projects.json`, …). `GET /e/<event>/export.json` produces the complete, portable event bundle for migration or archival. CSV text cells that start with `= + - @`, a tab or a carriage return get a leading quote; numeric columns do not; empty values are empty, never `null`.
 - Whole database: `docker compose --profile ops run --rm backup` writes a `pg_dump -Fc` that includes the images ([OPERATIONS.md](OPERATIONS.md#backup)).
+
+## Package T3 & T4 Extensions
+
+- **Community Voting (T3)**: `voting_config` (enabled, credit budget, participant weight multiplier, voter eligibility), `ballot` (one ballot per voter, quadratic credits allocation), `voting_tally` (audited tally snapshot: participants, public, and combined quadratic influence ranks), `mail_outbox` (dev-mode magic link inbox).
+- **Public Comments (T3)**: `project_comment` (project, author, body, state: pending → approved / rejected).
+- **Signed Records (T4)**: `signed_root` (event, publish_seq, Merkle root hash, leaf count, Ed25519 signature, public key PEM, statement), `judge_protocol` (judge evaluation protocol with RFC 9162 Merkle inclusion proofs).
+- **Certificates (T4)**: `team_certificate` (team, certificate number, award title, is_winner, payload sha256, Ed25519 signature, public key PEM, self-contained SVG content).
+- **Feedback (T4)**: `feedback_release` (audited release gate linking organizer release action to audit log seq).
+- **Webhooks (T4)**: `webhook_endpoint` (event, target URL, secret, active), `webhook_delivery` (Standard Webhooks v1 HMAC-SHA256 signature, payload, timestamp, status, delivery attempts).

@@ -36,16 +36,25 @@ Writes use the same views. A form post gets a 303 to the page that shows the res
 - Submissions: `/e/<event>/projects` (the gallery; POST creates a draft), `/projects/new`, `/projects/<id>` (GET; POST or PATCH edits), `/edit`, `/submit`, `/withdraw`, `/media`, `/media/<n>`, `/media/<n>/delete`.
 - Judging: `/e/<event>/judge/batches`, `/judge/assignments/<project>` with `/scores` and `/finalize`, `/judges/me/scores`, `/judges/<id>/scores`.
 - Organizing: `/e/<event>/progress`, `/scores`, `/assignments`, `/assignments/<judge>/<project>/unlock`, `/assignment-runs`, `/assignment-runs/<id>`, `/batches/<id>/abandon`, `/results`, `/publish`, `/normalization`, `/normalization/<table>`, `/duplicates`, `/duplicates/<id>`, `/duplicates/<id>/confirm`, `/audit`.
+- Community Voting (T3): `/e/<event>/voting`, `/settings`, `/close`, `/tally`, `/request-link`, `/vote/<token>`, `/outbox`.
+- Public Comments & Moderation (T3): `/e/<event>/projects/<project>/comments`, `/comments`, `/comments/<id>/approve`, `/reject`.
+- Signed Records & Judge Protocols (T4): `/e/<event>/records/root.txt`, `/records/root.sig`, `/records/pub.pem`, `/records/root`, `/e/<event>/judge/protocol`.
+- SVG Certificates (T4): `/certificates/<cert_no>`, `/e/<event>/teams/<team>/certificate`, `/e/<event>/teams/<team>/certificate.svg`.
+- Feedback Packs (T4): `/e/<event>/teams/<team>/feedback`, `/e/<event>/feedback/release`, `/e/<event>/feedback`.
+- Embed Widget (T4): `/e/<event>/embed`, `/static/widget.js`.
+- OpenAPI & Docs (T4): `/openapi.json`, `/api/v1/openapi.json`, `/docs`.
+- Webhooks & Events (T4): `/e/<event>/webhooks`, `/e/<event>/webhooks/<id>/test`, `/e/<event>/events`.
+- Portable Bundle Import & Export (T4): `/e/<event>/export`, `/e/<event>/export.json`, `/e/import`.
 
 `tests/test_authz_matrix.py` fails when a route is added without a row in its matrix.
 
 ## Layers
 
-- `samepage/domain/`: exact-fraction weighted totals, the state machines, the deadline message, CSV cell guarding, canonical JSON and the ranking hash, demo token derivation. No Django.
+- `samepage/domain/`: exact-fraction weighted totals, the state machines, the deadline message, CSV cell guarding, canonical JSON and the ranking hash, demo token derivation; quadratic voting calculus, Merkle tree & RFC 9162 inclusion proofs (`merkle.py`), SVG certificate generation & Ed25519 signing (`certificates.py`), distribution-first feedback percentiles & text histograms (`feedback.py`), Standard Webhooks HMAC signatures & SSRF safety checks (`webhooks.py`). No Django.
 - `samepage/engine/`: the Woodbury profile REML, z-scores, k=10 shrinkage, rank draws, the snapshot, bipartite assignment. NumPy only. `.importlinter` (checked in CI) keeps both of these free of Django and of the web layers.
-- `samepage/services/`: the only writers. `accounts`, `events`, `teams`, `submissions`, `judging`, `duplicates`, `results` (snapshots, freshness, publish), `ledger` (the rows behind every number), `audit`, `seed` (the demo importer), `guards` (the publish freeze), `access` (roles, then the policy).
-- `samepage/apps/portal/`: models, migrations (including the trigger SQL), the resource views and the templates' tag library.
-- `samepage/core/`: the view base, bearer auth, CSRF for anonymous cookie writes, renderers, errors, the policy tables, headers, the throttle.
+- `samepage/services/`: the only writers. `accounts`, `events`, `teams`, `submissions`, `judging`, `duplicates`, `results` (snapshots, freshness, publish), `ledger` (the rows behind every number), `audit`, `seed` (the demo importer), `guards` (the publish freeze), `access` (roles, then the policy); `voting`, `comments`, `signing`, `certificates`, `feedback`, `webhooks`, `bundle`.
+- `samepage/apps/portal/`: models, migrations (including the trigger SQL), the resource views and the templates' tag library. Management commands: `deliver_webhooks`, `samepage_admin`.
+- `samepage/core/`: the view base, bearer auth, CSRF for anonymous cookie writes, renderers, errors, the policy tables, headers, the throttle, OpenAPI schema generation (`schema.py`).
 - `samepage/ops/`: the container entrypoint, the production preflight, the database role handoff, the healthcheck.
 - `tools/`: `verify.py` (writes the receipts), `lifecycle_check.py` (one event over HTTP), `oracle_statsmodels.py` (the outside check). Standard library only, except the oracle.
 

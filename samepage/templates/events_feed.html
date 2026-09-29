@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="events-feed-page">
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h2>{{ title }}</h2>
+    <div class="downloads">
+      <a href="{{ download_json }}" role="button" class="outline">JSON</a>
+      <a href="{{ download_csv }}" role="button" class="outline">CSV</a>
+    </div>
+  </div>
+
+  <article>
+    <header><strong>Pollable Event Stream (after sequence: {{ after }})</strong></header>
+    <p>Consumers can poll this endpoint at <code>/e/{{ event }}/events.json?after=&lt;seq&gt;</code> to stream lifecycle updates without receiving push webhooks.</p>
+  </article>
+
+  <h3>Events ({{ count }})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Seq</th>
+        <th>Action</th>
+        <th>Actor</th>
+        <th>Object</th>
+        <th>Timestamp</th>
+        <th>Hash</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td><strong>{{ item.seq }}</strong></td>
+        <td><code>{{ item.action }}</code></td>
+        <td>{{ item.actor }}</td>
+        <td>{{ item.object }}</td>
+        <td><small>{{ item.at }}</small></td>
+        <td><small><code>{{ item.hash|slice:":16" }}...</code></small></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No events recorded after sequence {{ after }}.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

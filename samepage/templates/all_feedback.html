@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="all-feedback-page">
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h2>{{ title }}</h2>
+    <div class="downloads">
+      <a href="{{ download_json }}" role="button" class="outline">JSON</a>
+      <a href="{{ download_csv }}" role="button" class="outline">CSV (Mail-Merge)</a>
+    </div>
+  </div>
+
+  <article>
+    <header><strong>Feedback Packs Status: {% if released %}<span style="color: #27ae60;">RELEASED</span>{% else %}<span style="color: #e67e22;">UNRELEASED</span>{% endif %}</strong></header>
+    {% if not released %}
+    <p>Feedback packs are currently locked (403 for teams) until explicitly released by staff.</p>
+    <form method="post" action="/e/{{ event }}/feedback/release">
+      {% csrf_token %}
+      <button type="submit" class="primary">Release Feedback Packs to All Teams</button>
+    </form>
+    {% else %}
+    <p>Feedback packs have been published and are now visible to teams.</p>
+    {% endif %}
+  </article>
+
+  <h3>Teams Feedback Summary ({{ count }})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Team</th>
+        <th>Project</th>
+        <th>Score</th>
+        <th>Percentile</th>
+        <th>Criteria Means</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in items %}
+      <tr>
+        <td><a href="/e/{{ event }}/teams/{{ row.team_id }}/feedback"><strong>{{ row.team_name }}</strong></a></td>
+        <td>{{ row.project_title }}</td>
+        <td>{{ row.overall_score }}</td>
+        <td>{{ row.percentile }}%</td>
+        <td><small>{{ row.criteria_means }}</small></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">No feedback available yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

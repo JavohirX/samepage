@@ -56,6 +56,17 @@ ACTION_POLICY = {
     "outbox.read": STAFF,
     "comment.create": EVERYONE,
     "comments.moderate": STAFF,
+    # Package T4 actions
+    "records.read": EVERYONE,
+    "protocol.read": {JUDGE, ORGANIZER, ADMIN},
+    "certificate.read": EVERYONE,
+    "feedback.read": {PARTICIPANT, ORGANIZER, ADMIN},
+    "feedback.manage": STAFF,
+    "webhooks.manage": STAFF,
+    "events.feed": EVERYONE,
+    "embed.read": EVERYONE,
+    "bundle.export": STAFF,
+    "bundle.import": {ADMIN},
 }
 
 # These need a signed-in person even where the role column says visitor: a visitor who is
@@ -101,7 +112,17 @@ def allows(
     if action == "scores.read_own":
         return JUDGE in roles
     allowed = ACTION_POLICY.get(action, set())
-    if action in {"gallery.read", "project.read", "about.read", "voting.read", "voting.vote"}:
+    if action in {
+        "gallery.read",
+        "project.read",
+        "about.read",
+        "voting.read",
+        "voting.vote",
+        "records.read",
+        "certificate.read",
+        "events.feed",
+        "embed.read",
+    }:
         return True
     return bool(roles & allowed)
 

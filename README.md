@@ -67,9 +67,20 @@ What the seed holds:
 | Cross-judge normalization | Built. An additive judge-bias model fit by profile REML on a fixed grid, shown beside raw means and the Raptors k=10 shrinkage ([JUDGING.md](JUDGING.md)). Only finalized reviews count. Results refit when their inputs change and freeze at publish. statsmodels reproduces the ranking. |
 | CSV at every stage | Built. Events, projects, teams, people, rubric, scores, progress, assignments, assignment runs, results, the lab tables, duplicates and the audit log; a judge's own scores and batches. Formula-guarded cells, no literal `null`. `run.py` check 7. |
 
-### T3 and T4: not claimed
+### T3 Community & Public Engagement: Built & Verified
 
-Not built: community voting, comments, webhooks, certificates, signed records, an OpenAPI file, an embeddable widget, bulk import. Every list has a JSON twin, but that is not a documented API with full UI parity.
+- **Quadratic Community Voting**: Quadratic credit allocations (`sum(credits^2) <= budget`), separate participant and public voting channels with configurable influence multipliers, voter email magic links, and audited tally snapshots (`/e/<event>/voting`, `/tally`).
+- **Public Comments & Pre-moderation**: Public project comments with pre-moderation queue (`pending` → `approved`/`rejected`), comment rate throttles, and organizer moderation controls (`/e/<event>/projects/<project>/comments`, `/comments`).
+
+### T4 Advanced Verification, Distribution & Ecosystem: Built & Verified
+
+- **S7 Signed Evaluation Records & Judge Protocols**: RFC 9162 Merkle tree calculated over all counted reviews, Ed25519 signature over Merkle root (`root.txt`, `root.sig`, `pub.pem`, `/records/root`), and judge protocol generation with cryptographic audit inclusion proofs (`/e/<event>/judge/protocol`).
+- **S8 Self-Contained SVG Certificates**: High-fidelity award certificates generated as stand-alone SVG images with embedded Ed25519 cryptographic signatures and public keys, verifiable online or offline (`/certificates/<cert_no>`, `/e/<event>/teams/<team>/certificate.svg`).
+- **S9 Distribution-First Feedback Packs**: Team feedback packs with percentile rankings, ASCII/Unicode score distribution histograms, per-criterion means, anonymous judge comments, and audited organizer release gating (`/e/<event>/teams/<team>/feedback`, `/feedback`).
+- **S10 Embeddable Gallery Widget**: Standalone embed widget script (`widget.js`) with responsive card layout, CORS headers, and embed code generator (`/e/<event>/embed`).
+- **S11 OpenAPI 3.0 Specification & Swagger UI**: Full OpenAPI 3.0 schema generation at `/openapi.json` and `/api/v1/openapi.json` with interactive Swagger UI at `/docs`.
+- **S12 Webhooks & Outbox Worker**: Standard Webhooks HMAC-SHA256 signatures (`webhook-id`, `webhook-timestamp`, `webhook-signature`), SSRF safety validation, and background delivery worker (`deliver_webhooks`).
+- **S13 Portable Event Bundle Import & Export**: Roundtrip event export and import (`/e/<event>/export.json`, `POST /e/import.json`) matching and extending the native `fixtures.json` format.
 
 ## Checks you can run
 
@@ -119,7 +130,7 @@ Known gaps, not hidden:
 - **Nothing is emailed.** Team invite links, set-password links and role acceptance links are shown once, to the person who created them, to pass on by hand. There is no self-service password reset: an operator runs `python manage.py changepassword <email>`.
 - **HTTPS behind a proxy is not ready.** With a reverse proxy that terminates TLS and forwards plain HTTP, Django sees `http` while the browser sends `Origin: https://…`, so every browser form post, sign-in included, fails the CSRF check with 403. There is no `SECURE_PROXY_SSL_HEADER` or `CSRF_TRUSTED_ORIGINS` setting yet. Plain HTTP (demo mode, CI) works.
 - **No API tokens outside demo mode.** Bearer tokens are only the seeded demo ones. A script against a production instance signs in with `POST /login` and sends the session cookie and CSRF token, as `tools/lifecycle_check.py` does.
-- **No bulk import.** `fixtures.json` is loaded only by the demo seed. Export is per list (CSV and JSON), and `pg_dump` (the backup) is the full export.
+- **Bulk import/export.** Full event bundles are imported via `POST /e/import.json` (admin only) and exported via `GET /e/<event>/export.json`.
 - **Conflicts of interest are partly manual.** The matcher and manual assignment exclude a judge whose email is on the team, and any row in the `coi` table, but no page or route writes that table: an operator adds a declared conflict with SQL. Likewise a per-submission `deadline_exception` row is honoured by the triggers but has no route.
 - **Deletion.** Tracks, prize categories and events cannot be deleted, only added; event states only move forward. An issued assignment cannot be withdrawn, only its batch abandoned (its unfinished work is then topped up to other judges). There is no retention or account deletion tooling; an operator deletes rows with SQL.
 - **The public gallery shows every track to everyone, judges included.** Track scoping applies to judging: a judge is assigned, opens in the console and scores only projects in their tracks, and reads only their own scores.
@@ -128,7 +139,6 @@ Known gaps, not hidden:
 - **Open sign-up.** Anyone who can reach the portal can create an account (throttled, CSRF-checked). There is no captcha and no email verification.
 - **Lab tie-breaks.** Raw and k=10 ranks in the lab break exact ties by float noise rather than by the documented submission-time rule.
 - **Isolation is application code.** Read isolation is one policy module, not Postgres row-level security. The runtime database role cannot update `score_rev` or the audit log and does not own the tables, so it cannot disable those triggers, but the owner password is in the app container for migrations, and a host operator can edit rows. A downloaded CSV is the witness.
-- **T3 and T4 are not built** (see Tiers).
 
 ## Layout
 

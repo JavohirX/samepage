@@ -27,6 +27,7 @@ urlpatterns += [path("demo/enter/<slug:slug>", views.DemoEnterView.as_view(), na
 urlpatterns += fpath("about/access", views.AccessView, "access")
 urlpatterns += fpath("e", views.HomeView, "events")
 urlpatterns += [path("e/new", views.NewEventView.as_view(), name="event-new")]
+urlpatterns += fpath("e/import", views.EventImportView, "event-import")
 urlpatterns += fpath("e/<slug:evt>", views.EventView, "event")
 urlpatterns += fpath("e/<slug:evt>/settings", views.EventSettingsView, "event-settings")
 urlpatterns += fpath("e/<slug:evt>/state", views.EventStateView, "event-state")
@@ -84,3 +85,34 @@ urlpatterns += fpath("e/<slug:evt>/projects/<slug:prj>/comments", views.ProjectC
 urlpatterns += fpath("e/<slug:evt>/comments", views.CommentsQueueView, "comments-queue")
 urlpatterns += fpath("e/<slug:evt>/comments/<slug:cmt>/approve", views.CommentApproveView, "comment-approve")
 urlpatterns += fpath("e/<slug:evt>/comments/<slug:cmt>/reject", views.CommentRejectView, "comment-reject")
+
+# Signed records & judge protocols (T4 / S7)
+urlpatterns += [
+    path("e/<slug:evt>/records/root.txt", views.SignedRootRawView.as_view(), {"raw_fmt": "txt"}, name="signed-root-txt"),
+    path("e/<slug:evt>/records/root.sig", views.SignedRootRawView.as_view(), {"raw_fmt": "sig"}, name="signed-root-sig"),
+    path("e/<slug:evt>/records/pub.pem", views.SignedRootRawView.as_view(), {"raw_fmt": "pem"}, name="signed-root-pem"),
+]
+urlpatterns += fpath("e/<slug:evt>/records/root", views.SignedRootView, "signed-root")
+urlpatterns += fpath("e/<slug:evt>/judge/protocol", views.JudgeProtocolView, "judge-protocol")
+
+# Certificates (T4 / S8)
+urlpatterns += [path("e/<slug:evt>/teams/<slug:team>/certificate.svg", views.TeamCertificateSvgView.as_view(), name="team-certificate-svg")]
+urlpatterns += fpath("certificates/<slug:cert_no>", views.CertificateLookupView, "certificate-lookup")
+urlpatterns += fpath("e/<slug:evt>/teams/<slug:team>/certificate", views.TeamCertificateView, "team-certificate")
+
+# Feedback packs (T4 / S9)
+urlpatterns += fpath("e/<slug:evt>/teams/<slug:team>/feedback", views.TeamFeedbackView, "team-feedback")
+urlpatterns += fpath("e/<slug:evt>/feedback/release", views.FeedbackReleaseView, "feedback-release")
+urlpatterns += fpath("e/<slug:evt>/feedback", views.AllFeedbackView, "all-feedback")
+
+# Embed widget (T4 / S10)
+urlpatterns += fpath("e/<slug:evt>/embed", views.EmbedWidgetView, "embed-widget")
+
+# Webhooks (T4 / S12)
+urlpatterns += fpath("e/<slug:evt>/webhooks", views.WebhooksView, "webhooks")
+urlpatterns += fpath("e/<slug:evt>/webhooks/<slug:whep>/test", views.WebhookTestView, "webhook-test")
+urlpatterns += fpath("e/<slug:evt>/events", views.EventFeedView, "event-feed")
+
+# Bulk Import / Export (T4 / S13)
+urlpatterns += fpath("e/<slug:evt>/export", views.EventExportView, "event-export")
+

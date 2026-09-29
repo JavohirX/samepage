@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="feedback-pack-page">
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h2>{{ title }}</h2>
+    <div class="downloads">
+      <a href="{{ download_json }}" role="button" class="outline">JSON</a>
+      <a href="{{ download_csv }}" role="button" class="outline">CSV</a>
+    </div>
+  </div>
+
+  <article>
+    <header><strong>Distribution-First Team Feedback Pack</strong></header>
+    
+    <div class="grid">
+      <div>
+        <label>Overall Evaluated Score</label>
+        <input type="text" readonly value="{{ overall_score }} / 100">
+      </div>
+      <div>
+        <label>Percentile Rank</label>
+        <input type="text" readonly value="{{ percentile }}th Percentile">
+      </div>
+    </div>
+
+    <h4>Score Distribution Across All Projects</h4>
+    <p><small>The chart below displays where your submission scored relative to the entire cohort:</small></p>
+    <pre style="background: #2d3436; color: #dfe6e9; padding: 1rem; border-radius: 6px; overflow-x: auto;"><code>{{ histogram }}</code></pre>
+
+    <h4>Per-Criterion Means</h4>
+    <table>
+      <thead>
+        <tr>
+          <th>Criterion</th>
+          <th>Mean Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in items %}
+        <tr>
+          <td>{{ row.criterion }}</td>
+          <td><strong>{{ row.mean_score }}</strong></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="2">No criteria scores available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h4>Anonymous Judge Comments</h4>
+    {% if comments %}
+    <ul>
+      {% for comment in comments %}
+      <li style="margin-bottom: 0.5rem; font-style: italic;">"{{ comment }}"</li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p><em>No judge comments left for this submission.</em></p>
+    {% endif %}
+  </article>
+</div>
+{% endblock %}

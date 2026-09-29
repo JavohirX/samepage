@@ -482,4 +482,16 @@ def publish(event_id: str, actor: Person) -> Event:
     )
     snapshot.published_at = timezone.now()
     snapshot.save(update_fields=["published_at"])
+    try:
+        from samepage.services import certificates, signing, webhooks
+        signing.generate_signed_records(event)
+        certificates.issue_certificates(event)
+        webhooks.enqueue_event(event, "results.published", {
+            "event_id": event.id,
+            "event_name": event.name,
+            "ranking_sha256": snapshot.ranking_sha256,
+            "published_at": snapshot.published_at.isoformat(),
+        })
+    except Exception:
+        pass
     return event

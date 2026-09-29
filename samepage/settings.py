@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
     "samepage.apps.portal",
 ]
 
@@ -148,6 +149,7 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "DEFAULT_CONTENT_NEGOTIATION_CLASS": "samepage.core.negotiation.ViewChoosesFormat",
     "URL_FORMAT_OVERRIDE": None,
+    "DEFAULT_SCHEMA_CLASS": "samepage.core.schema.SamepageAutoSchema",
     "EXCEPTION_HANDLER": "samepage.core.errors.exception_handler",
     "UNAUTHENTICATED_USER": "django.contrib.auth.models.AnonymousUser",
     # Only write actions are throttled (core/throttles.py). run.py's GET routes are not.
@@ -160,6 +162,13 @@ REST_FRAMEWORK = {
     # 0 means the throttle keys on the TCP peer and ignores X-Forwarded-For, which a client can forge.
     # Behind one reverse proxy that sets X-Forwarded-For, set SAMEPAGE_NUM_PROXIES=1.
     "NUM_PROXIES": int(os.environ.get("SAMEPAGE_NUM_PROXIES", "0")),
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Samepage API",
+    "DESCRIPTION": "OpenAPI specification for Samepage evaluation and hackathon platform.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }
 
 CSRF_FAILURE_VIEW = "samepage.core.errors.csrf_failure"

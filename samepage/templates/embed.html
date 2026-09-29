@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="embed-widget-page">
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h2>{{ title }}</h2>
+    <div class="downloads">
+      <a href="{{ download_json }}" role="button" class="outline">JSON</a>
+    </div>
+  </div>
+
+  <article>
+    <header><strong>Script-Tag Embeddable Widget (S10)</strong></header>
+    <p>Include Samepage's public project gallery directly on any website using this lightweight script tag. No iframe is used, preserving parent page layout and responsive design.</p>
+
+    <label>Copy-paste Embed Code:</label>
+    <pre><code>{{ snippet }}</code></pre>
+
+    <label>Direct Script URL:</label>
+    <input type="text" readonly value="{{ script_url }}">
+
+    <label>Direct Gallery Fallback URL:</label>
+    <input type="text" readonly value="{{ gallery_url }}">
+
+    <footer>
+      <strong>Live Preview:</strong>
+      <div style="margin-top: 1rem; border: 1px dashed #cbd5e0; padding: 1rem; border-radius: 8px;">
+        <div id="samepage-gallery" data-event="{{ event }}"></div>
+        <script src="{{ script_url }}" async></script>
+      </div>
+    </footer>
+  </article>
+</div>
+{% endblock %}

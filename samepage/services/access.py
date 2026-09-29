@@ -26,7 +26,7 @@ def roles_of(principal, event_id: str | None) -> set[str]:
 def require(principal, action: str, *, event_id: str | None = None, target: str | None = None) -> set[str]:
     roles = roles_of(principal, event_id)
     published = False
-    if action == "results.read" and event_id:
+    if action in ("results.read", "bundle.export") and event_id:
         published = Event.objects.filter(id=event_id, state__in=("published", "archived")).exists()
     voting_counted = False
     if action == "voting.tally" and event_id:

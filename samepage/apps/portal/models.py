@@ -605,3 +605,107 @@ class ProjectComment(models.Model):
             ),
         ]
 
+
+# --- Package T4 Models ---
+
+class SignedRoot(models.Model):
+    """Merkle tree root over all counted reviews, signed with Ed25519 (S7)."""
+    id = models.TextField(primary_key=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="signed_roots")
+    publish_seq = models.PositiveIntegerField()
+    root_hash = models.CharField(max_length=64)
+    leaf_count = models.PositiveIntegerField()
+    signature_ed25519 = models.TextField()
+    public_key_pem = models.TextField()
+    statement = models.TextField()
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "signed_root"
+        unique_together = [("event", "publish_seq")]
+        ordering = ["-publish_seq"]
+
+
+class JudgeProtocol(models.Model):
+    """One signed evaluation protocol per judge with RFC 9162 inclusion proofs (S7)."""
+    id = models.TextField(primary_key=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="judge_protocols")
+    judge = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="protocols")
+    root = models.ForeignKey(SignedRoot, on_delete=models.CASCADE, related_name="protocols")
+    certificate_number = models.CharField(max_length=64, unique=True)
+    reviews_payload = models.JSONField(default=list)
+    statement_hash = models.CharField(max_length=64)
+    signature_ed25519 = models.TextField()
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "judge_protocol"
+        ordering = ["-created_at"]
+
+
+class TeamCertificate(models.Model):
+    """Self-contained SVG certificate per team with Ed25519 signature (S8)."""
+    id = models.TextField(primary_key=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="team_certificates")
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name="certificates")
+    certificate_number = models.CharField(max_length=64, unique=True)
+    award_title = models.CharField(max_length=255)
+    is_winner = models.BooleanField(default=False)
+    payload_sha256 = models.CharField(max_length=64)
+    signature_ed25519 = models.TextField()
+    public_key_pem = models.TextField()
+    svg_content = models.TextField()
+    issued_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "team_certificate"
+        unique_together = [("event", "team")]
+        ordering = ["certificate_number"]
+
+
+class FeedbackRelease(models.Model):
+    """Audited release gate for team feedback packs (S9)."""
+    event = models.OneToOneField(Event, on_delete=models.CASCADE, primary_key=True, related_name="feedback_release")
+    released_by = models.ForeignKey(Person, on_delete=models.SET_NULL, null=True, blank=True)
+    released_at = models.DateTimeField(default=timezone.now)
+    audit_seq = models.BigIntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "feedback_release"
+
+
+class WebhookEndpoint(models.Model):
+    """Registered webhook endpoint per event (S12)."""
+    id = models.TextField(primary_key=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="webhook_endpoints")
+    url = models.TextField()
+    secret = models.TextField()
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "webhook_endpoint"
+
+
+class WebhookDelivery(models.Model):
+    """Outbox delivery entry for Standard Webhooks (S12)."""
+    id = models.TextField(primary_key=True)
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name="webhook_deliveries")
+    endpoint = models.ForeignKey(WebhookEndpoint, on_delete=models.CASCADE, related_name="deliveries")
+    event_type = models.CharField(max_length=64)
+    msg_id = models.CharField(max_length=64)
+    timestamp = models.BigIntegerField()
+    payload = models.JSONField(default=dict)
+    signature = models.TextField()
+    status = models.CharField(max_length=16, default="pending")
+    attempts = models.PositiveIntegerField(default=0)
+    response_code = models.IntegerField(null=True, blank=True)
+    last_error = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(default=timezone.now)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "webhook_delivery"
+        ordering = ["-created_at"]
+
+

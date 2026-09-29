@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="records-root-page">
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h2>{{ title }}</h2>
+    <div class="downloads">
+      <a href="{{ download_json }}" role="button" class="outline">JSON</a>
+      <a href="{{ download_csv }}" role="button" class="outline">CSV</a>
+    </div>
+  </div>
+
+  <article>
+    <header><strong>Cryptographic Statement & Merkle Root (RFC 9162 / Ed25519)</strong></header>
+    <p>Published review records are cryptographically committed to an RFC 9162 Merkle tree. The root is signed with an Ed25519 private key generated at runtime.</p>
+    
+    <div class="grid">
+      <div>
+        <label>Publish Sequence</label>
+        <input type="text" readonly value="{{ publish_seq }}">
+      </div>
+      <div>
+        <label>Counted Leaves (Reviews)</label>
+        <input type="text" readonly value="{{ leaf_count }}">
+      </div>
+    </div>
+
+    <label>Merkle Root Hash (SHA-256)</label>
+    <pre><code>{{ root_hash }}</code></pre>
+
+    <label>Ed25519 Signature (Base64)</label>
+    <pre><code>{{ signature_ed25519 }}</code></pre>
+
+    <label>Canonical Signed Statement (root.txt)</label>
+    <pre><code>{{ statement }}</code></pre>
+
+    <footer>
+      <strong>Offline OpenSSL Verification:</strong>
+      <p>Download the verification artifacts below, then run the command:</p>
+      <div style="margin-bottom: 0.5rem;">
+        <a href="{{ root_txt }}" class="outline" role="button">Download root.txt</a>
+        <a href="{{ root_sig }}" class="outline" role="button">Download root.sig</a>
+        <a href="{{ pub_pem }}" class="outline" role="button">Download pub.pem</a>
+      </div>
+      <pre><code>{{ verify_command }}</code></pre>
+    </footer>
+  </article>
+</div>
+{% endblock %}

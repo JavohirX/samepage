@@ -110,6 +110,33 @@ READS = [
     ("/e/evt_01/comments", "hjc", STAFF),
     ("/e/evt_01/comments/cmt_unknown/approve", "hj", STAFF_POST_ONLY),
     ("/e/evt_01/comments/cmt_unknown/reject", "hj", STAFF_POST_ONLY),
+    # Package T4 / S7 Signed Records & Protocols
+    ("/e/evt_01/records/root.txt", "h", ALL_404),
+    ("/e/evt_01/records/root.sig", "h", ALL_404),
+    ("/e/evt_01/records/pub.pem", "h", ALL_404),
+    ("/e/evt_01/records/root", "hjc", ALL_404),
+    ("/e/evt_01/judge/protocol", "hjc", "401 403 403 404 404 404 404"),
+    # Package T4 / S8 Certificates
+    ("/certificates/cert_unknown", "hj", ALL_404),
+    ("/e/evt_01/teams/tm_01/certificate", "hj", ALL_404),
+    ("/e/evt_01/teams/tm_01/certificate.svg", "h", ALL_404),
+    # Package T4 / S9 Feedback Packs
+    ("/e/evt_01/teams/tm_01/feedback", "hj", STAFF),
+    ("/e/evt_01/feedback/release", "hj", STAFF_POST_ONLY),
+    ("/e/evt_01/feedback", "hjc", STAFF),
+    # Package T4 / S10 Gallery Embed
+    ("/e/evt_01/embed", "hj", PUBLIC),
+    # Package T4 / S11 OpenAPI & Docs
+    ("/openapi.json", "h", PUBLIC),
+    ("/api/v1/openapi.json", "h", PUBLIC),
+    ("/docs", "h", PUBLIC),
+    # Package T4 / S12 Webhooks & Event Feed
+    ("/e/evt_01/webhooks", "hjc", STAFF),
+    ("/e/evt_01/webhooks/whep_unknown/test", "hj", STAFF_POST_ONLY),
+    ("/e/evt_01/events", "hjc", PUBLIC),
+    # Package T4 / S13 Bundle Import & Export
+    ("/e/evt_01/export", "hj", STAFF),
+    ("/e/import", "hj", "401 403 403 403 403 403 405"),
 ]
 
 # method, path, expected status per principal for an empty JSON body.
@@ -156,6 +183,11 @@ WRITES = [
     ("POST", "/e/evt_01/projects/prj_01/comments.json", "401 422 422 422 422 422 422"),
     ("POST", "/e/evt_01/comments/cmt_unknown/approve.json", "401 403 403 403 403 404 404"),
     ("POST", "/e/evt_01/comments/cmt_unknown/reject.json", "401 403 403 403 403 404 404"),
+    # Package T4
+    ("POST", "/e/evt_01/feedback/release.json", "401 403 403 403 403 403 403"),
+    ("POST", "/e/evt_01/webhooks.json", "401 403 403 403 403 422 422"),
+    ("POST", "/e/evt_01/webhooks/whep_unknown/test.json", "401 403 403 403 403 404 404"),
+    ("POST", "/e/import.json", "401 403 403 403 403 403 422"),
 ]
 
 # Session routes: POST needs a CSRF token and starts or ends a cookie session (tests/test_sessions.py,

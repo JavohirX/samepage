@@ -26,8 +26,15 @@ from samepage.apps.portal.models import (
     ProjectComment,
     RoleGrant,
     Submission,
+    Team,
     TeamMember,
     VotingConfig,
+    SignedRoot,
+    JudgeProtocol,
+    TeamCertificate,
+    FeedbackRelease,
+    WebhookEndpoint,
+    WebhookDelivery,
 )
 from samepage.core.csrf import enforce_csrf
 from samepage.core.errors import Unprocessable, problem_response
@@ -42,15 +49,20 @@ from samepage.domain.transitions import EVENT as EVENT_MACHINE
 from samepage.services import (
     access,
     accounts,
+    bundle,
+    certificates,
     comments,
     duplicates,
     events,
+    feedback,
     judging,
     ledger,
     results,
+    signing,
     submissions,
     teams,
     voting,
+    webhooks,
 )
 from samepage.services.audit import verify
 from samepage.services.clock import db_now
@@ -526,13 +538,16 @@ class ProjectsView(SamepageView):
                 **payload.get("html_omitted", {}),
                 **{field: "blind judging is on" for field in sorted(hidden)},
             }
-        return render_payload(
+        resp = render_payload(
             request,
             payload,
             fmt,
             template="gallery.html",
             public_cache=request.principal is None,
         )
+        if fmt == "json":
+            resp["Access-Control-Allow-Origin"] = "*"
+        return resp
 
     def post(self, request, evt, fmt=None):
         # Re-check the write action. GET on this URL is public; POST is not.
@@ -1606,4 +1621,510 @@ class CommentRejectView(SamepageView):
             status=200,
             location=f"/e/{evt}/comments.json",
         )
+
+
+# --- Package T4 Views ---
+
+class SignedRootView(SamepageView):
+    action = "records.read"
+    formats = ("html", "json", "csv")
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        root = signing.get_latest_signed_root(event)
+        if not root:
+            # If results not published yet, generate if published or raise 404
+            if event.state in ("published", "archived"):
+                root = signing.generate_signed_records(event)
+            else:
+                raise NotFound("No signed records published for this event.")
+
+        verify_cmd = (
+            f"openssl pkeyutl -verify -pubin -inkey pub.pem -rawin -in root.txt -sigfile root.sig"
+        )
+        items = [{
+            "publish_seq": root.publish_seq,
+            "root_hash": root.root_hash,
+            "leaf_count": root.leaf_count,
+            "signature_ed25519": root.signature_ed25519,
+            "created_at": root.created_at.isoformat(),
+        }]
+        payload = {
+            "title": f"Signed Records Root · {event.name}",
+            "resource": "signed_root",
+            "event": evt,
+            "root_hash": root.root_hash,
+            "leaf_count": root.leaf_count,
+            "publish_seq": root.publish_seq,
+            "signature_ed25519": root.signature_ed25519,
+            "public_key_pem": root.public_key_pem,
+            "statement": root.statement,
+            "verify_command": verify_cmd,
+            "columns": ["publish_seq", "root_hash", "leaf_count", "signature_ed25519", "created_at"],
+            "items": items,
+            "count": len(items),
+            "download_csv": f"/e/{evt}/records/root.csv",
+            "download_json": f"/e/{evt}/records/root.json",
+            "root_txt": f"/e/{evt}/records/root.txt",
+            "root_sig": f"/e/{evt}/records/root.sig",
+            "pub_pem": f"/e/{evt}/records/pub.pem",
+        }
+        return render_payload(request, payload, fmt, template="records_root.html")
+
+
+class SignedRootRawView(SamepageView):
+    action = "records.read"
+    formats = ("html", "json")
+
+    def get(self, request, evt, raw_fmt):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        root = signing.get_latest_signed_root(event)
+        if not root:
+            if event.state in ("published", "archived"):
+                root = signing.generate_signed_records(event)
+            else:
+                raise NotFound("No signed records published for this event.")
+
+        if raw_fmt == "txt":
+            return HttpResponse(root.statement, content_type="text/plain; charset=utf-8")
+        elif raw_fmt == "sig":
+            import base64
+            sig_raw = base64.b64decode(root.signature_ed25519)
+            resp = HttpResponse(sig_raw, content_type="application/octet-stream")
+            resp["Content-Disposition"] = 'attachment; filename="root.sig"'
+            return resp
+        elif raw_fmt == "pem":
+            resp = HttpResponse(root.public_key_pem, content_type="application/x-pem-file")
+            resp["Content-Disposition"] = 'attachment; filename="pub.pem"'
+            return resp
+        raise NotFound("Unknown file format.")
+
+
+class JudgeProtocolView(SamepageView):
+    action = "protocol.read"
+    formats = ("html", "json", "csv")
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        roles = access.roles_of(request.principal, evt)
+        is_staff = bool(roles & {"organizer", "admin"})
+
+        # Target judge
+        target_id = request.GET.get("judge")
+        if target_id:
+            target_judge = Person.objects.filter(id=target_id).first()
+        else:
+            target_judge = request.principal
+
+        if not target_judge:
+            raise NotFound("Judge not found.")
+
+        # Non-staff can only read their own protocol (IDOR protection)
+        if not is_staff and target_judge.id != request.principal.id:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You can only access your own evaluation protocol.")
+
+        protocol = JudgeProtocol.objects.filter(event=event, judge=target_judge).order_by("-created_at").first()
+        if not protocol:
+            if event.state in ("published", "archived"):
+                signing.generate_signed_records(event)
+                protocol = JudgeProtocol.objects.filter(event=event, judge=target_judge).order_by("-created_at").first()
+            if not protocol:
+                raise NotFound("Protocol not found for this judge.")
+
+        reviews = protocol.reviews_payload or []
+        csv_items = [
+            {
+                "submission_id": r["submission_id"],
+                "criterion_id": r["criterion_id"],
+                "score": r["score"],
+                "comment": r["comment"],
+                "leaf_hash": r["leaf_hash"],
+            }
+            for r in reviews
+        ]
+        payload = {
+            "title": f"Judge Protocol · {target_judge.name or target_judge.email}",
+            "resource": "judge_protocol",
+            "event": evt,
+            "judge_id": target_judge.id,
+            "certificate_number": protocol.certificate_number,
+            "statement_hash": protocol.statement_hash,
+            "signature_ed25519": protocol.signature_ed25519,
+            "root_hash": protocol.root.root_hash,
+            "columns": ["submission_id", "criterion_id", "score", "comment", "leaf_hash"],
+            "items": csv_items,
+            "reviews": reviews,
+            "count": len(reviews),
+            "download_csv": f"/e/{evt}/judge/protocol.csv",
+            "download_json": f"/e/{evt}/judge/protocol.json",
+        }
+        return render_payload(request, payload, fmt, template="judge_protocol.html")
+
+
+class CertificateLookupView(SamepageView):
+    action = "certificate.read"
+    formats = ("html", "json")
+
+    def get(self, request, cert_no, fmt=None):
+        data = certificates.get_certificate_by_number(cert_no)
+        payload = {
+            "title": f"Certificate Verification · {cert_no}",
+            "resource": "certificate",
+            "valid": True,
+            **data,
+            "download_json": f"/certificates/{cert_no}.json",
+        }
+        return render_payload(request, payload, fmt, template="certificate.html")
+
+
+class TeamCertificateView(SamepageView):
+    action = "certificate.read"
+    formats = ("html", "json")
+
+    def get(self, request, evt, team, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        team_obj = Team.objects.filter(event=event, id=team).first()
+        if not team_obj:
+            raise NotFound("Unknown team.")
+
+        cert = TeamCertificate.objects.filter(event=event, team=team_obj).first()
+        if not cert:
+            if event.state in ("published", "archived"):
+                certificates.issue_certificates(event)
+                cert = TeamCertificate.objects.filter(event=event, team=team_obj).first()
+            if not cert:
+                raise NotFound("Certificate has not been issued yet.")
+
+        payload = {
+            "title": f"Certificate · {team_obj.name}",
+            "resource": "team_certificate",
+            "event": evt,
+            "team_id": team,
+            "team_name": team_obj.name,
+            "certificate_number": cert.certificate_number,
+            "award": cert.award_title,
+            "is_winner": cert.is_winner,
+            "payload_sha256": cert.payload_sha256,
+            "signature_ed25519": cert.signature_ed25519,
+            "public_key_pem": cert.public_key_pem,
+            "svg_download": f"/e/{evt}/teams/{team}/certificate.svg",
+            "download_json": f"/e/{evt}/teams/{team}/certificate.json",
+        }
+        return render_payload(request, payload, fmt, template="certificate.html")
+
+
+class TeamCertificateSvgView(SamepageView):
+    action = "certificate.read"
+    formats = ("html", "json")
+
+    def get(self, request, evt, team):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        team_obj = Team.objects.filter(event=event, id=team).first()
+        if not team_obj:
+            raise NotFound("Unknown team.")
+        cert = TeamCertificate.objects.filter(event=event, team=team_obj).first()
+        if not cert:
+            if event.state in ("published", "archived"):
+                certificates.issue_certificates(event)
+                cert = TeamCertificate.objects.filter(event=event, team=team_obj).first()
+            if not cert:
+                raise NotFound("Certificate not found.")
+
+        resp = HttpResponse(cert.svg_content, content_type="image/svg+xml; charset=utf-8")
+        resp["Content-Disposition"] = f'inline; filename="{cert.certificate_number}.svg"'
+        return resp
+
+
+class TeamFeedbackView(SamepageView):
+    action = "feedback.read"
+    formats = ("html", "json")
+
+    def get(self, request, evt, team, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        team_obj = Team.objects.filter(event=event, id=team).first()
+        if not team_obj:
+            raise NotFound("Unknown team.")
+
+        roles = access.roles_of(request.principal, evt)
+        is_staff = bool(roles & {"organizer", "admin"})
+        is_member = request.principal and TeamMember.objects.filter(team=team_obj, person=request.principal).exists()
+        if not (is_staff or is_member):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("You can only view your own team's feedback.")
+
+        pack = feedback.get_team_feedback(event, team_obj, allow_unreleased=is_staff)
+        crit_items = [
+            {"criterion": k, "mean_score": v}
+            for k, v in pack["criteria_means"].items()
+        ]
+        payload = {
+            "title": f"Feedback · {team_obj.name}",
+            "resource": "feedback",
+            "event": evt,
+            "team_id": team,
+            "team_name": team_obj.name,
+            "project_id": pack["project_id"],
+            "project_title": pack["title"],
+            "overall_score": pack["overall_score"],
+            "percentile": pack["percentile"],
+            "histogram": pack["histogram"],
+            "criteria_means": pack["criteria_means"],
+            "comments": pack["comments"],
+            "columns": ["criterion", "mean_score"],
+            "items": crit_items,
+            "count": len(crit_items),
+            "download_csv": f"/e/{evt}/teams/{team}/feedback.csv",
+            "download_json": f"/e/{evt}/teams/{team}/feedback.json",
+        }
+        return render_payload(request, payload, fmt, template="feedback.html")
+
+
+class FeedbackReleaseView(SamepageView):
+    formats = ("html", "json")
+    action = "feedback.manage"
+    write_action = "feedback.manage"
+
+    def post(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        rel = feedback.release_feedback(event, request.principal)
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/feedback",
+            payload={"ok": True, "released_at": rel.released_at.isoformat()},
+            status=200,
+            location=f"/e/{evt}/feedback.json",
+        )
+
+
+class AllFeedbackView(SamepageView):
+    action = "feedback.manage"
+    formats = ("html", "json", "csv")
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        released = feedback.is_feedback_released(event)
+        items = feedback.get_all_teams_feedback_summary(event) if released else []
+        payload = {
+            "title": f"Feedback Summary · {event.name}",
+            "resource": "all_feedback",
+            "event": evt,
+            "released": released,
+            "columns": ["team_id", "team_name", "project_id", "overall_score", "percentile", "criteria_means", "comments"],
+            "items": items,
+            "count": len(items),
+            "download_csv": f"/e/{evt}/feedback.csv",
+            "download_json": f"/e/{evt}/feedback.json",
+        }
+        return render_payload(request, payload, fmt, template="all_feedback.html")
+
+
+class EmbedWidgetView(SamepageView):
+    action = "embed.read"
+    formats = ("html", "json")
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        host = request.build_absolute_uri("/").rstrip("/")
+        gallery_url = f"{host}/e/{evt}/projects"
+        script_url = f"{host}/static/widget.js"
+        snippet = (
+            f'<div id="samepage-gallery" data-event="{evt}" data-host="{host}"></div>\n'
+            f'<script src="{script_url}" async></script>\n'
+            f'<noscript><a href="{gallery_url}">View {event.name} Project Gallery</a></noscript>'
+        )
+        payload = {
+            "title": f"Embed Gallery Widget · {event.name}",
+            "resource": "embed",
+            "event": evt,
+            "gallery_url": gallery_url,
+            "script_url": script_url,
+            "snippet": snippet,
+            "download_json": f"/e/{evt}/embed.json",
+        }
+        return render_payload(request, payload, fmt, template="embed.html")
+
+
+class WebhooksView(SamepageView):
+    action = "webhooks.manage"
+    write_action = "webhooks.manage"
+    formats = ("html", "json", "csv")
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        endpoints = list(WebhookEndpoint.objects.filter(event=event).order_by("-created_at"))
+        deliveries = list(WebhookDelivery.objects.filter(event=event).order_by("-created_at")[:20])
+
+        items = [
+            {
+                "id": ep.id,
+                "url": ep.url,
+                "is_active": ep.is_active,
+                "created_at": ep.created_at.isoformat(),
+            }
+            for ep in endpoints
+        ]
+        deliv_items = [
+            {
+                "id": d.id,
+                "event_type": d.event_type,
+                "status": d.status,
+                "response_code": d.response_code or 0,
+                "attempts": d.attempts,
+                "created_at": d.created_at.isoformat(),
+            }
+            for d in deliveries
+        ]
+        payload = {
+            "title": f"Webhooks · {event.name}",
+            "resource": "webhooks",
+            "event": evt,
+            "endpoints": items,
+            "deliveries": deliv_items,
+            "columns": ["id", "url", "is_active", "created_at"],
+            "items": items,
+            "count": len(items),
+            "download_csv": f"/e/{evt}/webhooks.csv",
+            "download_json": f"/e/{evt}/webhooks.json",
+        }
+        return render_payload(request, payload, fmt, template="webhooks.html")
+
+    def post(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        body = _body(request)
+        url = str(body.get("url", "")).strip()
+        secret = str(body.get("secret", "")).strip()
+        if not url:
+            raise Unprocessable("Endpoint URL is required.")
+
+        actor = request.principal.email if request.principal else "admin"
+        ep = webhooks.register_endpoint(event, url=url, secret=secret, actor=actor)
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/webhooks",
+            payload={"id": ep.id, "url": ep.url, "secret": ep.secret, "is_active": ep.is_active},
+            status=201,
+            location=f"/e/{evt}/webhooks.json",
+        )
+
+
+class WebhookTestView(SamepageView):
+    formats = ("html", "json")
+    action = "webhooks.manage"
+    write_action = "webhooks.manage"
+
+    def post(self, request, evt, whep, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        ep = WebhookEndpoint.objects.filter(event=event, id=whep).first()
+        if not ep:
+            raise NotFound("Webhook endpoint not found.")
+
+        deliveries = webhooks.enqueue_event(event, "ping", {"message": "Test webhook delivery from Samepage"})
+        success = False
+        if deliveries:
+            success = webhooks.deliver_one(deliveries[0])
+
+        return _done(
+            request,
+            fmt,
+            html_to=f"/e/{evt}/webhooks",
+            payload={"ok": True, "delivered": success},
+            status=200,
+            location=f"/e/{evt}/webhooks.json",
+        )
+
+
+class EventFeedView(SamepageView):
+    action = "events.feed"
+    formats = ("html", "json", "csv")
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        after = int(request.GET.get("after", 0))
+        items = webhooks.get_event_feed(event, after_seq=after)
+        payload = {
+            "title": f"Events Feed · {event.name}",
+            "resource": "events_feed",
+            "event": evt,
+            "after": after,
+            "columns": ["seq", "action", "actor", "object", "at", "hash"],
+            "items": items,
+            "count": len(items),
+            "download_csv": f"/e/{evt}/events.csv",
+            "download_json": f"/e/{evt}/events.json",
+        }
+        return render_payload(request, payload, fmt, template="events_feed.html")
+
+
+class EventExportView(SamepageView):
+    action = "bundle.export"
+    formats = ("json",)
+
+    def get(self, request, evt, fmt=None):
+        event = Event.objects.filter(id=evt).first()
+        if not event:
+            raise NotFound("Unknown event.")
+        data = bundle.export_event_bundle(event)
+        response = JsonResponse(data, json_dumps_params={"indent": 2})
+        response["Content-Disposition"] = f'attachment; filename="{evt}_bundle.json"'
+        return response
+
+
+class EventImportView(SamepageView):
+    formats = ("html", "json")
+    action = "bundle.import"
+    write_action = "bundle.import"
+
+    def post(self, request, fmt=None):
+        body = _body(request)
+        if not isinstance(body, dict) or "event" not in body:
+            raise Unprocessable("Invalid bundle format. Expected JSON object with 'event' key.")
+
+        actor = request.principal.email if request.principal else "admin"
+        new_id = str(body.get("event", {}).get("id", ""))
+        event, stats = bundle.import_event_bundle(body, new_event_id=new_id, actor=actor)
+        location = f"/e/{event.id}"
+        return _done(
+            request,
+            fmt,
+            html_to=location,
+            payload={
+                "ok": True,
+                "event_id": event.id,
+                "read": stats["read"],
+                "written": stats["written"],
+                "rejected": stats["rejected"],
+            },
+            status=201,
+            location=f"/e/{event.id}.json",
+        )
+
 

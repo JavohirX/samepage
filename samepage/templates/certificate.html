@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="certificate-page">
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h2>{{ title }}</h2>
+    <div class="downloads">
+      <a href="{{ download_json }}" role="button" class="outline">JSON</a>
+      {% if svg_download %}
+      <a href="{{ svg_download }}" role="button" class="primary" download>Download SVG</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <article>
+    <header>
+      <strong>Status: {% if valid %}<span style="color: #27ae60;">VALID & VERIFIED</span>{% else %}UNVERIFIED{% endif %}</strong>
+    </header>
+    <div class="grid">
+      <div>
+        <label>Certificate Number</label>
+        <input type="text" readonly value="{{ certificate_number }}">
+      </div>
+      <div>
+        <label>Event</label>
+        <input type="text" readonly value="{{ event_name }} ({{ event_id }})">
+      </div>
+    </div>
+
+    {% if type == "team" %}
+    <div class="grid">
+      <div>
+        <label>Team</label>
+        <input type="text" readonly value="{{ team_name }} ({{ team_id }})">
+      </div>
+      <div>
+        <label>Award / Recognition</label>
+        <input type="text" readonly value="{{ award }}">
+      </div>
+    </div>
+    {% endif %}
+
+    <label>Payload SHA-256 Digest</label>
+    <pre><code>{{ payload_sha256 }}</code></pre>
+
+    <label>Ed25519 Cryptographic Signature</label>
+    <pre><code>{{ signature_ed25519 }}</code></pre>
+
+    {% if svg_download %}
+    <div style="margin-top: 1.5rem; text-align: center;">
+      <h4>Certificate Preview</h4>
+      <img src="{{ svg_download }}" alt="Certificate SVG" style="max-width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    </div>
+    {% endif %}
+  </article>
+</div>
+{% endblock %}

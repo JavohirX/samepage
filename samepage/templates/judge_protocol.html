@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="judge-protocol-page">
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h2>{{ title }}</h2>
+    <div class="downloads">
+      <a href="{{ download_json }}" role="button" class="outline">JSON</a>
+      <a href="{{ download_csv }}" role="button" class="outline">CSV</a>
+    </div>
+  </div>
+
+  <article>
+    <header><strong>Evaluation Protocol & Merkle Inclusion Proofs</strong></header>
+    <div class="grid">
+      <div>
+        <label>Certificate Number</label>
+        <input type="text" readonly value="{{ certificate_number }}">
+      </div>
+      <div>
+        <label>Committed Merkle Root</label>
+        <input type="text" readonly value="{{ root_hash }}">
+      </div>
+    </div>
+    <label>Protocol Statement Hash & Signature</label>
+    <pre><code>Hash: {{ statement_hash }}
+Sig:  {{ signature_ed25519 }}</code></pre>
+  </article>
+
+  <h3>Counted Evaluations & Inclusion Proofs ({{ count }})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Project ID</th>
+        <th>Criterion</th>
+        <th>Score</th>
+        <th>Comment</th>
+        <th>Leaf Hash</th>
+        <th>Inclusion Proof</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for rev in reviews %}
+      <tr>
+        <td><code>{{ rev.submission_id }}</code></td>
+        <td>{{ rev.criterion_id }}</td>
+        <td><strong>{{ rev.score }}</strong></td>
+        <td>{{ rev.comment|default:"<em>none</em>" }}</td>
+        <td><small><code>{{ rev.leaf_hash|slice:":16" }}...</code></small></td>
+        <td><small>{{ rev.inclusion_proof|length }} sibling hashes</small></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No counted reviews found for this judge.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

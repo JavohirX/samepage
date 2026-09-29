@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="webhooks-page">
+  <div style="display: flex; justify-content: space-between; align-items: baseline;">
+    <h2>{{ title }}</h2>
+    <div class="downloads">
+      <a href="{{ download_json }}" role="button" class="outline">JSON</a>
+      <a href="{{ download_csv }}" role="button" class="outline">CSV</a>
+    </div>
+  </div>
+
+  <article>
+    <header><strong>Register New Webhook Endpoint (Standard Webhooks Scheme)</strong></header>
+    <form method="post" action="/e/{{ event }}/webhooks">
+      {% csrf_token %}
+      <div class="grid">
+        <div>
+          <label for="url">Endpoint URL</label>
+          <input type="url" id="url" name="url" placeholder="https://example.com/webhooks" required>
+          <small>Guarded against SSRF: private IP addresses and loopback hosts are rejected.</small>
+        </div>
+        <div>
+          <label for="secret">Signing Secret (optional, auto-generated if blank)</label>
+          <input type="text" id="secret" name="secret" placeholder="whsec_...">
+        </div>
+      </div>
+      <button type="submit" class="primary">Add Webhook Endpoint</button>
+    </form>
+  </article>
+
+  <h3>Active Endpoints ({{ count }})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>URL</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for ep in endpoints %}
+      <tr>
+        <td><code>{{ ep.id }}</code></td>
+        <td>{{ ep.url }}</td>
+        <td>{% if ep.is_active %}<span style="color: #27ae60;">Active</span>{% else %}Inactive{% endif %}</td>
+        <td><small>{{ ep.created_at }}</small></td>
+        <td>
+          <form method="post" action="/e/{{ event }}/webhooks/{{ ep.id }}/test" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="outline" style="padding: 0.2rem 0.5rem; font-size: 0.8rem;">Send Test Ping</button>
+          </form>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">No webhook endpoints registered.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Recent Outbox Deliveries</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Event</th>
+        <th>Status</th>
+        <th>HTTP Code</th>
+        <th>Attempts</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in deliveries %}
+      <tr>
+        <td><code>{{ d.id }}</code></td>
+        <td>{{ d.event_type }}</td>
+        <td>
+          {% if d.status == "delivered" %}<span style="color: #27ae60;">Delivered</span>
+          {% elif d.status == "pending" %}<span style="color: #f39c12;">Pending</span>
+          {% else %}<span style="color: #e74c3c;">Failed</span>{% endif %}
+        </td>
+        <td>{{ d.response_code|default:"-" }}</td>
+        <td>{{ d.attempts }}</td>
+        <td><small>{{ d.created_at }}</small></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No deliveries in outbox.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

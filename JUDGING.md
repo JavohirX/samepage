@@ -109,3 +109,20 @@ The matcher spreads load (each round uses a judge at most once, under the cap); 
 Columns: `id, judge_id, project_id, track`, one `c_<key>` per criterion in rubric order (on evt_01 `c_functionality, c_quality, c_innovation`), then `weighted_total, comment, state, counted, excluded_reason, merged_into, audit_seq`.
 
 Empty comments are empty strings. `counted` is `true` or `false`. The file does not contain the literal `null`. Text cells that start with `= + - @`, tab or carriage return get a leading quote. Numeric columns do not.
+
+## Signed Records & Judge Protocols (Package T4)
+
+When results are published, an Ed25519 keypair is generated (or loaded) for the event to cryptographically bind the final evaluation records:
+
+1. **Merkle Tree over Counted Reviews**:
+   Each counted review forms a leaf in an RFC 9162 binary Merkle tree. Leaf content is canonically serialized (`v1:review:<event_id>:<judge_id>:<submission_id>:<weighted_total>:<scores_sha256>`). The Merkle root is signed with the event's Ed25519 private key.
+   - Raw statement: `GET /e/<event>/records/root.txt`
+   - Detached signature: `GET /e/<event>/records/root.sig`
+   - Public key (PEM): `GET /e/<event>/records/pub.pem`
+   - Verified root inspection: `GET /e/<event>/records/root` (HTML, JSON, CSV)
+
+2. **Judge Protocols**:
+   Each judge can inspect and export their personal evaluation protocol (`GET /e/<event>/judge/protocol`). The protocol contains:
+   - All reviews submitted by that judge.
+   - For every counted review, an RFC 9162 Merkle audit path (inclusion proof) proving that the review was included in the signed Merkle root.
+   - Cryptographic verification that no scores were altered, omitted, or tampered with between evaluation and publication.
