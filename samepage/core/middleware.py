@@ -23,6 +23,8 @@ class BearerCSRFBypass:
     def __call__(self, request):
         if request.META.get("HTTP_AUTHORIZATION", "").startswith("Bearer "):
             request._dont_enforce_csrf_checks = True
+        elif request.path.startswith("/demo/enter/"):
+            request._dont_enforce_csrf_checks = True
         return self.get_response(request)
 
 

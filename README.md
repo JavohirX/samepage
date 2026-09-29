@@ -5,6 +5,8 @@
 
 A self-hosted hackathon judging portal where every number on a page opens as the rows behind it, every list is also a CSV and a JSON from one policy check, and an independent statsmodels image re-derives the published ranking from the `scores.csv` an organizer downloads.
 
+> 🚀 **Live VPS Version**: This `live` branch is configured for instant deployment on any VPS or remote server with pre-seeded accounts, open judging batches, and interactive community voting. See [VPS.md](VPS.md) for 1-command deployment instructions.
+
 ### Judge this in 5 minutes
 
 ```

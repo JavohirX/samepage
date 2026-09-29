@@ -284,6 +284,10 @@ DEMO_LANDING = {
     "jdg03": "/e/evt_01/judge/batches",
     "priya1": "/e/evt_01/projects",
     "control": "/e/evt_02/projects",
+    "live_org": "/e/evt_01/progress",
+    "live_admin": "/e/evt_01/progress",
+    "live_judge": "/e/evt_01/judge/batches",
+    "live_part": "/e/evt_01/projects",
 }
 
 

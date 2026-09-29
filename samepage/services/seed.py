@@ -50,8 +50,9 @@ def seed(path: str) -> bool:
             fixture = json.load(handle)
         _event_one(fixture)
         _event_two()
-        _passwords_and_tokens()
         _demo_batches(fixture)
+        _demo_interactive_data(fixture)
+        _passwords_and_tokens()
     results.rebuild("evt_01", actor="importer")
     return True
 
@@ -195,6 +196,30 @@ def _staff(event: Event) -> None:
     RoleGrant.objects.create(person_id="org_01", event=event, role="organizer")
     RoleGrant.objects.create(person_id="adm_01", event=event, role="organizer")
 
+    # Prebuilt Live test accounts
+    aliases = [
+        ("per_live_org", "organizer@samepage.live", "Organizer Live", "organizer", False),
+        ("per_live_judge", "judge@samepage.live", "Judge Live", "judge", False),
+        ("per_live_part", "participant@samepage.live", "Participant Live", "participant", False),
+        ("per_live_admin", "admin@samepage.live", "Admin Live", "organizer", True),
+    ]
+    for pid, email, name, role, is_admin in aliases:
+        p = Person.objects.create(
+            id=pid,
+            email=email,
+            name=name,
+            password=UNUSABLE,
+            is_admin=is_admin,
+        )
+        RoleGrant.objects.create(person=p, event=event, role=role)
+        if role == "judge":
+            for track in Track.objects.filter(event=event):
+                JudgeTrack.objects.create(person=p, event=event, track=track)
+        elif role == "participant":
+            tm = Team.objects.filter(event=event).first()
+            if tm:
+                TeamMember.objects.create(event=event, team=tm, person=p)
+
 
 def _event_two() -> None:
     event = Event.objects.create(
@@ -222,8 +247,9 @@ def _event_two() -> None:
 
 def _passwords_and_tokens() -> None:
     shared = make_password(DEMO_PASSWORD)
+    # Set demo password for ALL persons in DB so every judge and participant can log in!
+    Person.objects.all().update(password=shared)
     for slug, spec in PRINCIPALS.items():
-        Person.objects.filter(id=spec["id"]).update(password=shared)
         ApiToken.objects.create(
             id=f"tok_{slug}",
             person_id=spec["id"],
@@ -233,7 +259,7 @@ def _passwords_and_tokens() -> None:
         )
 
 
-DEMO_JUDGES = ("jdg_08", "jdg_03")
+DEMO_JUDGES = ("jdg_08", "jdg_03", "per_live_judge")
 
 
 def _demo_batches(fixture: dict) -> None:
@@ -298,18 +324,70 @@ def _demo_batches(fixture: dict) -> None:
     )
 
 
+def _demo_interactive_data(fixture: dict) -> None:
+    """Pre-seed live interactive elements: community voting and project comments."""
+    from samepage.apps.portal.models import ProjectComment, VotingConfig
+    from samepage.services.clock import db_now
+
+    evt_01 = Event.objects.filter(id="evt_01").first()
+    if not evt_01:
+        return
+
+    # 1. Enable community quadratic voting on evt_01
+    VotingConfig.objects.update_or_create(
+        event=evt_01,
+        defaults={
+            "id": "vc_demo_01",
+            "credit_budget": 25,
+            "allow_accounts": True,
+            "allow_open": True,
+            "allow_email": False,
+            "state": "open",
+        },
+    )
+
+    # 2. Pre-seed comments on prj_01 for moderation demonstration
+    prj_01 = Submission.objects.filter(id="prj_01").first()
+    author = Person.objects.filter(id="per_control").first() or Person.objects.first()
+    if prj_01 and author:
+        now = db_now()
+        ProjectComment.objects.get_or_create(
+            id="cmt_demo_01",
+            defaults={
+                "event": evt_01,
+                "submission": prj_01,
+                "author": author,
+                "text": "Excellent offline-first architecture and transparent audit trails!",
+                "state": "approved",
+                "created_at": now,
+            },
+        )
+        ProjectComment.objects.get_or_create(
+            id="cmt_demo_02",
+            defaults={
+                "event": evt_01,
+                "submission": prj_01,
+                "author": author,
+                "text": "How does the profile REML formulation compare to ordinary OLS on sparse data?",
+                "state": "pending",
+                "created_at": now,
+            },
+        )
+
+
 def banner(port: int = 8080) -> str:
     base = f"http://localhost:{port}"
     lines = [
-        "samepage ready",
+        "samepage live test environment ready",
         f"gallery {base}/e/evt_01/projects",
-        f"organizer {base}/demo/enter/org",
-        f"judge_a {base}/demo/enter/jdg08",
+        f"organizer {base}/demo/enter/org (or organizer@samepage.live)",
+        f"judge_a {base}/demo/enter/jdg08 (or judge@samepage.live)",
         f"judge_b {base}/demo/enter/jdg03",
-        f"participant {base}/demo/enter/priya1",
-        f"admin {base}/demo/enter/admin",
-        f"password {DEMO_PASSWORD}",
+        f"participant {base}/demo/enter/priya1 (or participant@samepage.live)",
+        f"admin {base}/demo/enter/admin (or admin@samepage.live)",
+        f"all passwords: {DEMO_PASSWORD}",
     ]
     for slug, label in (("org", "organizer"), ("jdg08", "judge_a"), ("jdg03", "judge_b"), ("priya1", "participant")):
         lines.append(f"{label} Authorization: Bearer {demo_token(slug)}")
     return "\n".join(lines)
+

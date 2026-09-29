@@ -12,7 +12,11 @@ from rest_framework.exceptions import PermissionDenied
 
 
 def enforce_csrf(request) -> None:
+    if getattr(request, "_dont_enforce_csrf_checks", False):
+        return
     django_request = getattr(request, "_request", request)
+    if getattr(django_request, "_dont_enforce_csrf_checks", False):
+        return
     check = CSRFCheck(lambda _request: None)
     check.process_request(django_request)
     reason = check.process_view(django_request, None, (), {})

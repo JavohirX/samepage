@@ -24,7 +24,15 @@ DEBUG = os.environ.get("SAMEPAGE_DEBUG") == "1" and DEMO_MODE
 # The demo key is public. Production refuses to boot with it (samepage/ops/preflight.py).
 DEMO_SECRET_KEY = "demo-secret-key-not-for-production-use-32b"
 SECRET_KEY = os.environ.get("SECRET_KEY") or DEMO_SECRET_KEY
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1,app").split(",") if h.strip()]
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "*").split(",") if h.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    h.strip()
+    for h in os.environ.get(
+        "CSRF_TRUSTED_ORIGINS",
+        "http://localhost:8080,http://127.0.0.1:8080,http://0.0.0.0:8080",
+    ).split(",")
+    if h.strip()
+]
 
 INSTALLED_APPS = [
     "django.contrib.auth",

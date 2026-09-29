@@ -15,6 +15,10 @@ PRINCIPALS = {
     "jdg03": {"id": "jdg_03", "email": "priya.nair@example.org", "name": "Priya Nair", "role": "judge"},
     "priya1": {"id": "per_priya1", "email": "priya1@example.org", "name": "Priya", "role": "participant"},
     "control": {"id": "per_control", "email": "control@example.org", "name": "Control", "role": "participant"},
+    "live_judge": {"id": "per_live_judge", "email": "judge@samepage.live", "name": "Judge Live", "role": "judge"},
+    "live_org": {"id": "per_live_org", "email": "organizer@samepage.live", "name": "Organizer Live", "role": "organizer"},
+    "live_part": {"id": "per_live_part", "email": "participant@samepage.live", "name": "Participant Live", "role": "participant"},
+    "live_admin": {"id": "per_live_admin", "email": "admin@samepage.live", "name": "Admin Live", "role": "admin"},
 }
 
 
