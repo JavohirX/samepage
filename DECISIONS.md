@@ -1,23 +1,23 @@
 # Decisions
 
-| # | Decision | Why |
-|---|---|---|
-| D1 | One view class per resource. The suffix or the body type picks the response. | A generated pair of views is more machinery than the product needs. |
-| D2 | Suffixed URL patterns first, slug converters. | Otherwise `prj_01.json` is parsed as an id. |
-| D3 | Errors are plain Django responses. | DRF would re-render a 403 through the CSV renderer and return 500. |
-| D4 | No htmx, no SPA, no Node. | Pico and one small script. Pages work without JavaScript except autosave. |
-| D5 | T3 is not in this build. | The checker does not score it, and a claimed-but-unverified tier is the expensive mistake. |
-| D6 | The λ grid is part of the method. | Independent fits land on the same point only if they search the same places. The likelihood is flat. |
-| D7 | Imported rows are exempt from the one-active-submission index. | The fixture has two active Dry Harbour rows for one team. Enforcing the index on import crashes the seed. |
-| D8 | The runtime role is created on every boot and owns nothing. | Init scripts do not re-run on a reused volume. |
-| D9 | Fixture people get an unusable password. Six demo principals share one hash. | Hashing every person at boot costs minutes. |
-| D10 | Bearer tokens in `.dogfood.toml`, not cookies. | `run.py` then reaches the deadline check instead of a CSRF 403. |
-| D11 | 403 before resolving a forbidden id. | A 404 fails the peer-score check and depends on whether the row exists. |
-| D12 | Nothing is signed. | Stated in Limits. Detection is the audit chain plus a downloaded CSV. |
-| D13 | Uploaded images are stored in Postgres, not on disk. | A `pg_dump` is then the whole backup, and the app container keeps a read-only root. Images are capped at 2 MB. |
-| D14 | Results refit on read when their inputs changed, not on every write. | A full fit with leave-one-judge-out takes seconds; a judge finalizing 30 projects should not wait for 30 of them. The fingerprint makes staleness impossible to miss. |
-| D15 | Publish freezes the inputs, not just the page. | A frozen page over mutable scores would disagree with `scores.csv`. Every write that feeds the ranking answers 409 after publish. |
-| D16 | Invite and password links are shown once and never emailed. | The portal runs offline. Only the sha256 is stored, like bearer tokens. |
-| D17 | A judge or organizer role offered to an account that is already in use waits for that account to accept it. | Anyone can sign up with any address, so an existing account is not proof of who holds it. A brand-new account gets the role at once, because only its set-password link can sign it in. |
-| D18 | When the judge-bias model cannot be fitted, rank by the mean weighted total and say so. | A λ picked from rounding noise would look like a result. The fallback still honours the organizer's weights, and the page names the method and the reason. |
-| D19 | Only global admins create events; an admin becomes the new event's first organizer. | Event creation is rare and grants a role; organizers of one event should not be able to mint others. |
+| # | Decision | Rejected alternative | Trade-off / Rationale |
+|---|---|---|---|
+| D1 | One view class per resource (`SamepageView`). Suffix or content-type picks response format. | Separate pairs of views (Django views for HTML, DRF API views for JSON/CSV). | View base handles suffixed routing, but ensures single policy check, identical data pipeline, and zero drift across HTML, JSON, and CSV. |
+| D2 | Suffixed URL patterns registered first, with slug converters. | Content negotiation headers (`Accept`) only. | Requires explicit route order, but allows curl and browser address bars to directly download `.csv` and `.json` without `prj_01.json` parsing as an ID. |
+| D3 | Errors are plain Django responses (RFC 9457 problem+json). | Standard DRF exception handler. | Custom error formatting required, but prevents DRF from attempting to re-render 403 errors through CSV renderer (which yields a 500 status code). |
+| D4 | Server-rendered pages with Pico CSS and vanilla JS; zero Node dependency. | Single-page application (React/Vue) or htmx with npm build step. | Less client-side state transitions, but app is 100% offline once built and all pages work without JavaScript except live autosave. |
+| D5 | T3 and T4 are built and tested, but only T1 and T2 are claimed in `.dogfood.toml`. | Claiming T3 and T4 in `.dogfood.toml`. | Cannot earn points on automated tiers beyond T2 if checker doesn't test them, but eliminates risk of checker failure on unverified tests. |
+| D6 | Fixed 2-stage grid search for profile REML λ maximization. | Unconstrained numerical optimizer (e.g. BFGS/L-BFGS). | Search space bounded to grid resolution, but guarantees deterministic reproducibility across machines and external libraries (statsmodels oracle matches exact λ). |
+| D7 | Imported fixture rows are exempt from the single active submission index. | Strict database unique constraint during seed import. | DB unique constraint is conditional, but prevents seed failure on the fixture's deliberate Dry Harbour duplicate (prj_07 / prj_41). |
+| D8 | Runtime role `samepage_app` created and granted least privileges on every boot. | Docker entrypoint init scripts (`/docker-entrypoint-initdb.d`). | Adds ~0.5s boot overhead, but ensures reused persistent volumes with existing data always receive updated least-privilege grants. |
+| D9 | Fixture people share a pre-hashed unusable password; demo accounts share one PBKDF2 hash. | Computing unique PBKDF2 hashes for all 40+ fixture users at seed time. | Demo accounts share test credentials, but boot time drops from minutes to under two seconds. |
+| D10 | Bearer tokens in `.dogfood.toml` for demo mode. | Cookie-only sessions for API testing. | Bearer tokens exist in demo mode, but standard test runners (`run.py`) reach deadline and permission checks without CSRF 403 failures. |
+| D11 | 403 Forbidden returned before resolving forbidden resource IDs. | 404 Not Found when ID does not exist or user lacks permission. | Leaks that an ID format is valid/invalid to policy, but guarantees peer-score privacy (no probe for existence) and passes peer-score refusal checks. |
+| D12 | In T1/T2 core flow, records are verified via audit hash chains and downloaded CSVs; T4 adds optional Ed25519 Merkle root signing and judge protocols (`/records/root`). | Relying solely on Postgres superuser trust or mandating local GPG keys. | Cryptographic signature generation step after publish in T4, but provides offline simplicity for core judging while enabling RFC 9162 Merkle verification when needed. |
+| D13 | Uploaded media stored as raw bytes in Postgres. | Storing files on local disk or object storage (S3). | Database grows with uploads (2 MB cap per image), but a single `pg_dump` constitutes a complete backup and the container filesystem remains read-only. |
+| D14 | Results snapshots refit on read when input fingerprint changes, not on write. | Synchronous model refit on every score finalization. | First read after scores change has ~3s latency, but judges finalizing 30 reviews experience instant responses and row lock prevents duplicate refits. |
+| D15 | Publish freezes inputs permanently, not just the cached HTML view. | Caching the results view while leaving scores mutable. | Organizers cannot modify scores after publish without unpublishing, but guarantees `scores.csv` will never drift from published results. |
+| D16 | Invitation and password links shown once in UI and never emailed. | Local SMTP server or cloud email service (SES/SendGrid). | Organizers must copy-paste links manually, but system runs 100% offline with zero external network dependencies. |
+| D17 | Judge/organizer role for existing account requires explicit acceptance link. | Auto-assigning elevated privileges by email address. | Extra step for users with existing accounts, but prevents account spoofing since anyone can sign up with any email. |
+| D18 | Fallback to mean weighted total if REML fit fails or times out. | Failing the request with 500 or showing partial REML results. | Falls back to simple averaging without variance components, but ensures results page is always available and transparently discloses fallback. |
+| D19 | Only global admins create events; creator becomes first event organizer. | Allowing any registered user or event organizer to create new events. | Requires admin intervention to spin up events, but prevents multi-tenant event spam and maintains strict privilege boundaries. |

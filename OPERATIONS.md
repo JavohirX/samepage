@@ -144,4 +144,4 @@ Then `python run.py .dogfood.toml` works unchanged, and so do `python tools/orac
 2. `manage.py samepage_admin`, sign in, create the event (see [Production](#production)).
 3. Point people at Download CSV on any organizer list, and at `results.json` after publish.
 
-The first gaps: TLS behind a proxy (above), no email delivery (links are handed on by hand), no SSO, no self-service password reset, no API tokens outside demo mode, no webhooks, no signed records, and read isolation lives in application code.
+The first gaps: TLS behind a proxy (above), no email delivery (links are handed on by hand), no SSO, no self-service password reset, no API tokens outside demo mode, and read isolation lives in application code.

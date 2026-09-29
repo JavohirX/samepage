@@ -15,4 +15,4 @@ Do not add a second way to render a list. Add the rows to the service that alrea
 
 Do not put a test-only switch in the runtime image. Tests change settings through pytest-django's `settings` fixture.
 
-T3 stays out unless the README's tier line is updated in the same change and the claim stays honest about what `run.py` can see.
+T3 and T4 stay out of `.dogfood.toml` unless verified by the official checker, and any tier claims stay honest about what `run.py` tests.
