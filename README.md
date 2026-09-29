@@ -1,8 +1,41 @@
 # Samepage
 
-A self-hosted hackathon submission and judging portal: Django, Postgres and server-rendered pages, offline once built. Every number on a page opens as the rows behind it. Each list is also a CSV file and a JSON file, built from the same rows through the same policy check, so tools we did not write can audit it: the organizers' `run.py`, and a separate statsmodels image that re-derives the published ranking from the `scores.csv` an organizer downloads.
+[![CI](https://github.com/JavohirX/samepage/actions/workflows/acceptance.yml/badge.svg)](https://github.com/JavohirX/samepage/actions/workflows/acceptance.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-Built for DOGFOOD 2026. [`.dogfood.toml`](.dogfood.toml) claims **T1 and T2** and nothing else, and `run.py` prints `claimed T1 T2, verified T1 T2` ([acceptance-report.txt](acceptance-report.txt), from the CI run of `docker compose up`). What is not built is under [Limits](#limits).
+A self-hosted hackathon judging portal where every number on a page opens as the rows behind it, every list is also a CSV and a JSON from one policy check, and an independent statsmodels image re-derives the published ranking from the `scores.csv` an organizer downloads.
+
+### Judge this in 5 minutes
+
+```
+docker compose up --wait          # builds, migrates, seeds — one command
+python run.py .dogfood.toml       # last line: claimed T1 T2, verified T1 T2
+```
+
+Then open http://localhost:8080. The demo bar at the top switches between Organizer (`organizer@example.org`), Judge A (`marek.nowak@example.org`), Judge B (`priya.nair@example.org`), Participant (`priya1@example.org`) and Admin (`admin@example.org`) with one click (or sign in with password `samepage-demo`).
+Tour the workflow in [DEMO.md](DEMO.md). Full evaluation map in [REVIEWING.md](REVIEWING.md).
+
+### Scoreboard
+
+| Check | Result | Receipt |
+|---|---|---|
+| Official checker (`run.py`) | 7/7 PASS | [acceptance-report.txt](acceptance-report.txt) |
+| Test suite | 2605 passed | [receipts/tests.txt](receipts/tests.txt) |
+| statsmodels oracle | λ and ranking match | [receipts/oracle-statsmodels.txt](receipts/oracle-statsmodels.txt) |
+| CI (amd64 + arm64) | 5 jobs green | [receipts/ci-run.txt](receipts/ci-run.txt) |
+| Backup/restore round-trip | PASS | [receipts/backup-restore.txt](receipts/backup-restore.txt) |
+| Production mode | boots clean, demo creds refused | [receipts/production-mode.txt](receipts/production-mode.txt) |
+
+### Tiers
+
+| Tier | Status |
+|---|---|
+| **T1** (submissions, gallery, deadline) | Claimed and verified by `run.py` |
+| **T2** (judging, normalization, role isolation) | Claimed and verified by `run.py` |
+| T3 (community voting, comments) | Built and tested; not claimed in `.dogfood.toml` |
+| T4 (signed records, certificates, feedback, webhooks, OpenAPI, embeds, bundles) | Built and tested; not claimed in `.dogfood.toml` |
+
+[`.dogfood.toml`](.dogfood.toml) claims **T1 and T2** only. What is not built is under [Limits](#limits).
 
 ## Quick start
 
@@ -82,6 +115,59 @@ What the seed holds:
 - **S12 Webhooks & Outbox Worker**: Standard Webhooks HMAC-SHA256 signatures (`webhook-id`, `webhook-timestamp`, `webhook-signature`), SSRF safety validation, and background delivery worker (`deliver_webhooks`).
 - **S13 Portable Event Bundle Import & Export**: Roundtrip event export and import (`/e/<event>/export.json`, `POST /e/import.json`) matching and extending the native `fixtures.json` format.
 
+## What's different here: 5 showcase items
+
+Every item below links the file where it lives, explains why an organizer cares, and gives an exact command with its real output:
+
+1. **One URL, three formats through one policy check**
+   - *What it is*: Every resource endpoint serves HTML, RFC 4180 CSV, and JSON through a single `SamepageView` class and a single centralized policy check (`core/policy.py`).
+   - *Why an organizer cares*: Organizers and external audit tools can fetch any view as a spreadsheet or JSON with identical authorization rules and zero synchronization drift.
+   - *Command*: `py -3.12 -m pytest tests/test_policy.py -v`
+   - *Output*: `tests/test_policy.py::test_gallery_is_public PASSED ... [100%] 4 passed in 0.16s`
+   - *Lives in*: [`samepage/core/views.py`](samepage/core/views.py) and [`samepage/core/policy.py`](samepage/core/policy.py)
+
+2. **Outside statistics oracle re-derives ranking & detects statistical tie band**
+   - *What it is*: Profile REML estimator on a fixed grid solving additive judge bias, cross-verified with Woodbury inversion and explicit statistical tie band detection.
+   - *Why an organizer cares*: Protects against judge leniency/harshness bias without black-box magic, and honestly discloses when projects in the top tier are statistically tied.
+   - *Command*: `py -3.12 -m samepage.engine.cli fixtures.json`
+   - *Output*:
+     ```
+     lambda 15.3239
+     loglik 16.8432
+     projects 40 reviews 121
+     top5 prj_34 prj_11 prj_25 prj_10 prj_37
+     ranking_sha256 e06611c796589b646edd7945722a223c5799caf2642c784f5da2fea9b5e903a3
+     dense gap 1.776e-15
+     banner statistical tie for the top 5 across ranks 1–15
+     ```
+   - *Lives in*: [`samepage/engine/reml.py`](samepage/engine/reml.py) and [`samepage/engine/snapshot.py`](samepage/engine/snapshot.py)
+
+3. **Domain layer purity enforced by Import Linter**
+   - *What it is*: Strict architectural boundary where `samepage/domain` and `samepage/engine` are pure Python/NumPy, forbidden from importing Django, database models, or HTTP layers.
+   - *Why an organizer cares*: All core business rules, exact-fraction math, and ranking statistics can be audited and tested offline without a web framework or database.
+   - *Command*: `py -3.12 -c "from importlinter.cli import lint_imports_command; lint_imports_command()"`
+   - *Output*:
+     ```
+     Contracts: 1 kept, 0 broken.
+     Analyzed 118 files, 401 dependencies.
+     domain and engine stay free of Django and of the web layers KEPT
+     ```
+   - *Lives in*: [`.importlinter`](.importlinter) and [`samepage/domain/`](samepage/domain/)
+
+4. **Exact-fraction arithmetic for weighted rubrics**
+   - *What it is*: All weighted rubric calculations use infinite-precision rational arithmetic (`fractions.Fraction`) rather than IEEE 754 floating-point numbers.
+   - *Why an organizer cares*: Eliminates rounding drift, representation artifacts, and false tie breaks caused by binary floating-point math.
+   - *Command*: `py -3.12 -m pytest tests/domain/test_rules.py -k test_weighted_total_is_exact -v`
+   - *Output*: `tests/domain/test_rules.py::test_weighted_total_is_exact PASSED [100%]`
+   - *Lives in*: [`samepage/domain/weighted.py`](samepage/domain/weighted.py)
+
+5. **Defense-in-depth DB role & Postgres triggers**
+   - *What it is*: Unprivileged runtime PostgreSQL role `samepage_app` that cannot update `score_rev` or `audit_event` and cannot drop safety triggers, enforced dynamically on every boot.
+   - *Why an organizer cares*: Even a severe application-level vulnerability cannot alter the historical audit trail or bypass deadline triggers.
+   - *Command*: `git grep "GRANT" samepage/ops/entrypoint.py`
+   - *Output*: Shows explicit runtime grants restricting `samepage_app` from `UPDATE` or `DELETE` on audit and score revision tables.
+   - *Lives in*: [`samepage/ops/entrypoint.py`](samepage/ops/entrypoint.py) and [`samepage/apps/portal/migrations/0002_triggers.py`](samepage/apps/portal/migrations/0002_triggers.py)
+
 ## Checks you can run
 
 **1. The organizers' checker.** `python run.py .dogfood.toml` ends in `claimed T1 T2, verified T1 T2`.
@@ -119,7 +205,7 @@ Every file below is the output of a command, not typed. CI ([`.github/workflows/
 
 | Proves | Does not prove |
 |---|---|
-| Refusal lives in the backend and covers HTML, JSON and CSV. A judge asking for another judge's scores gets 403, not an empty page. | That a database superuser cannot edit a row. The audit chain and a downloaded CSV detect that afterwards. Nothing is signed. |
+| Refusal lives in the backend and covers HTML, JSON and CSV. A judge asking for another judge's scores gets 403, not an empty page. | That a database superuser cannot edit a row directly in the database. Core T1/T2 detects alterations via the audit hash chain and downloaded CSVs (T4 adds optional RFC 9162 Merkle root signing and judge protocols). |
 | The REML fit is the GLS estimator at the λ that maximises the profile likelihood on a fixed grid. statsmodels, an independent implementation, gets the same λ and ranking. A dense inverse agrees with the Woodbury form to about 1e-15 on the seed (the test asserts 1e-9). | That the model suits this data. The project signal is small: the results page says the top 5 is a statistical tie across ranks 1 to 15. |
 | The progress numbers equal the row counts of the CSVs they link to, checked on every request. | Anything about T3 or T4. We do not claim them. |
 
