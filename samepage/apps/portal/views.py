@@ -1462,7 +1462,7 @@ class VotingRequestLinkView(SamepageView):
             request,
             fmt,
             html_to=f"/e/{evt}/voting",
-            payload={"ok": True, "message": "A magic link has been sent to your email (valid for 15 minutes)."},
+            payload={"ok": True, "message": "A one-time voting link (valid for 15 minutes) is in the organizers' outbox; nothing is emailed."},
             status=200,
             location=f"/e/{evt}/voting.json",
         )
