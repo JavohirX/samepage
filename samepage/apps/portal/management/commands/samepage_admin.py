@@ -20,6 +20,15 @@ from samepage.core.errors import Unprocessable
 from samepage.services import accounts
 
 
+def _words(detail) -> str:
+    """A validation error as plain text: 'password: That password ...', not DRF's ErrorDetail repr."""
+    if isinstance(detail, dict):
+        return "; ".join(f"{field}: {_words(value)}" for field, value in detail.items())
+    if isinstance(detail, (list, tuple)):
+        return "; ".join(_words(item) for item in detail)
+    return str(detail)
+
+
 class Command(BaseCommand):
     help = "Create a global admin (or make an existing account one) with a password you choose."
 
@@ -32,7 +41,7 @@ class Command(BaseCommand):
         try:
             email = accounts.clean_email(options["email"])
         except Unprocessable as exc:
-            raise CommandError(str(exc.detail)) from exc
+            raise CommandError(_words(exc.detail)) from exc
         password = os.environ.get("SAMEPAGE_ADMIN_PASSWORD")
         if not password:
             if not os.isatty(0):
@@ -43,7 +52,7 @@ class Command(BaseCommand):
         try:
             accounts.check_new_password(password)
         except Unprocessable as exc:
-            raise CommandError(str(exc.detail)) from exc
+            raise CommandError(_words(exc.detail)) from exc
         person = Person.objects.filter(email=email).first()
         if person is None:
             person = Person.objects.create_superuser(email, password=password, name=options["name"] or email)

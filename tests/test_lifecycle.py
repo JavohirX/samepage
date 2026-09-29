@@ -155,6 +155,27 @@ def test_admin_command_bootstraps_a_production_admin(monkeypatch, production):
     assert created.status_code == 201
 
 
+@pytest.mark.parametrize(
+    "email, password, message",
+    [
+        ("ops@example.org", "samepage-demo", "password: That password is published in this repository. Choose another."),
+        ("ops@example.org", "short", "password: "),
+        ("not-an-email", "a long admin password", "email: "),
+    ],
+)
+def test_admin_command_refusals_are_plain_sentences(monkeypatch, production, email, password, message):
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    monkeypatch.setenv("SAMEPAGE_ADMIN_PASSWORD", password)
+    with pytest.raises(CommandError) as refused:
+        call_command("samepage_admin", email=email, name="Ops")
+    text = str(refused.value)
+    assert text.startswith(message)
+    assert "ErrorDetail" not in text and "{" not in text and "[" not in text
+    assert not Person.objects.filter(email__iexact=email).exists()
+
+
 def test_manage_py_createsuperuser_path_makes_a_global_admin():
     admin = Person.objects.create_superuser("root@example.org", password="another long one")
     assert admin.is_admin and admin.id.startswith("per_")
