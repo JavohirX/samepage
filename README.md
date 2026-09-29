@@ -22,7 +22,7 @@ Tour the workflow in [DEMO.md](DEMO.md). Full evaluation map in [REVIEWING.md](R
 | Check | Result | Receipt |
 |---|---|---|
 | Official checker (`run.py`) | 7/7 PASS | [acceptance-report.txt](acceptance-report.txt) |
-| Test suite | 2605 passed, 2304 of them the route × principal × format matrix | [receipts/tests.txt](receipts/tests.txt) |
+| Test suite | 2605 passed (2304 of them in `tests/test_authz_matrix.py`: every route × principal × format) | [receipts/tests.txt](receipts/tests.txt) |
 | statsmodels oracle | λ and ranking match | [receipts/oracle-statsmodels.txt](receipts/oracle-statsmodels.txt) |
 | CI (amd64 + arm64) | 5 jobs green | [receipts/ci-run.txt](receipts/ci-run.txt) |
 | Backup/restore round-trip | PASS | [receipts/backup-restore.txt](receipts/backup-restore.txt) |
@@ -37,7 +37,7 @@ Tour the workflow in [DEMO.md](DEMO.md). Full evaluation map in [REVIEWING.md](R
 | T3 (community voting, comments) | Built and tested; not claimed in `.dogfood.toml` |
 | T4 (signed records, certificates, feedback, webhooks, OpenAPI, embeds, bundles) | Built and tested; not claimed in `.dogfood.toml` |
 
-[`.dogfood.toml`](.dogfood.toml) claims **T1 and T2** only. What is not built is under [Limits](#limits).
+[`.dogfood.toml`](.dogfood.toml) claims **T1 and T2** only. Known gaps, T3/T4 ones included, are under [Limits](#limits).
 
 ## Quick start
 
@@ -50,7 +50,7 @@ python run.py .dogfood.toml
 
 The first command builds the image, starts Postgres, migrates, seeds `fixtures.json` and returns once the app is healthy. The second is the organizers' checker; its last line is `claimed T1 T2, verified T1 T2`. Then open http://localhost:8080. A plain `docker compose up` works too and keeps the log in the foreground.
 
-The first build pulls the base images (pinned by digest, amd64 and arm64) and the Python wheels. After that nothing needs the network: CI boots the stack with container egress blocked and the checker still passes. The port is published on 127.0.0.1 only; Postgres is not published at all. On Windows type `python` (not `python3`) and `curl.exe` (not PowerShell's `curl`). To run without Docker (Python 3.12 and a Postgres), see [OPERATIONS.md](OPERATIONS.md#local-without-docker).
+The first build pulls the base images (pinned by digest, amd64 and arm64) and the Python wheels. After that nothing needs the network: CI also boots the stack with container egress blocked and runs the checker. That job is marked best effort (`continue-on-error: true`), so it cannot fail CI; it passed in the run named in [receipts/ci-run.txt](receipts/ci-run.txt). The port is published on 127.0.0.1 only; Postgres is not published at all. On Windows type `python` (not `python3`) and `curl.exe` (not PowerShell's `curl`). To run without Docker (Python 3.12 and a Postgres), see [OPERATIONS.md](OPERATIONS.md#local-without-docker).
 
 ## Demo logins (evaluation only)
 
@@ -153,7 +153,7 @@ ranking_sha256 portal      e06611c796589b646edd7945722a223c5799caf2642c784f5da2f
 PASS: statsmodels reproduces lambda, every adjusted score, every rank and ranking_sha256
 ```
 
-`python -m samepage.engine.cli fixtures.json` runs our engine alone on the fixture (no database) and prints the same λ (15.3239) and `ranking_sha256`, plus `banner statistical tie for the top 5 across ranks 1–15`. Its `loglik 16.8432` differs from statsmodels' by a constant that does not depend on λ ([JUDGING.md](JUDGING.md#the-grid-is-part-of-the-method)).
+The oracle's y is the mean of the three criteria, which equals `weighted_total` because evt_01 weights them 1:1:1; it checks that on every row. `python -m samepage.engine.cli fixtures.json` runs our engine alone on the fixture (no database) and prints the same λ (15.3239) and `ranking_sha256`, plus `banner statistical tie for the top 5 across ranks 1–15`. Its `loglik 16.8432` differs from statsmodels' by a constant that does not depend on λ ([JUDGING.md](JUDGING.md#the-grid-is-part-of-the-method)).
 
 **3. Every number on the progress page recounts its own CSV.** An organizer can trust the dashboard because it checks itself: each number links to the CSV rows behind it, and on every request the page renders each linked CSV, parses it and compares the row count.
 Lives in [`samepage/services/ledger.py`](samepage/services/ledger.py).
