@@ -477,6 +477,7 @@ class ProjectsView(SamepageView):
         if not staff:
             query.pop("state", None)
             query.pop("review", None)
+            query.pop("duplicate", None)
         include = staff and query.get("state") in {"all", "withdrawn"}
         payload = ledger.project_rows(
             evt,

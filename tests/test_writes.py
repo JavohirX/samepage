@@ -186,16 +186,61 @@ def test_progress_numbers_are_checked_against_the_csv_they_link(client, bearer):
         assert len(rows) == metric["value"] == metric["csv_rows"], metric
 
 
-def test_progress_recount_reports_a_number_that_disagrees_with_its_csv(client, bearer):
-    # A withdrawal that is not a duplicate decision appears in projects.csv?state=withdrawn
-    # but not in the "withdrawn duplicate" number, so the footer must say 5 of 6.
-    Submission.objects.filter(id="prj_02").update(state="withdrawn", withdrawn_reason="team_left")
+def test_progress_recount_reports_a_number_that_disagrees_with_its_csv(client, bearer, monkeypatch):
+    # No route makes a number disagree with its CSV, so the recount is made to see one extra row.
+    from samepage.services import ledger
+
+    real = ledger.csv_recounts
+
+    def one_extra_short_row(event_id):
+        counts = real(event_id)
+        return {**counts, "short": counts["short"] + 1}
+
+    monkeypatch.setattr(ledger, "csv_recounts", one_extra_short_row)
     progress = client.get("/e/evt_01/progress.json", **bearer("org")).json()
     assert progress["recount"] == {"matched": 5, "total": 6}
     mismatch = [m for m in progress["metrics"] if m["matches_csv"] == "false"]
-    assert [m["key"] for m in mismatch] == ["withdrawn_duplicate"]
+    assert [m["key"] for m in mismatch] == ["short"]
+    assert mismatch[0]["csv_rows"] == mismatch[0]["value"] + 1
     page = client.get("/e/evt_01/progress", **bearer("org")).content.decode("utf-8")
     assert "5 of 6 numbers" in page
+    assert f"short: page says {mismatch[0]['value']}," in page
+
+
+def _csv_ids(client, bearer, href: str) -> list[str]:
+    body = client.get(href, **bearer("org")).content.decode("utf-8")
+    return [row["id"] for row in csv.DictReader(io.StringIO(body))]
+
+
+def test_an_ordinary_withdrawal_is_not_a_withdrawn_duplicate(client, bearer):
+    before = client.get("/e/evt_01/progress.json", **bearer("org")).json()
+    assert before["sentence"]["withdrawn_duplicate"] == 1
+    kept = Submission.objects.get(duplicate_group_id="dup_01", state="submitted").id
+    # An organizer withdraws a project outside any duplicate group, then the one dup_01 kept.
+    for project in ("prj_02", kept):
+        response = client.post(
+            f"/e/evt_01/projects/{project}/withdraw.json", {"reason": "rules breach"}, content_type="application/json", **bearer("org")
+        )
+        assert response.status_code == 200, response.content
+    progress = client.get("/e/evt_01/progress.json", **bearer("org")).json()
+    assert progress["recount"] == {"matched": 6, "total": 6}
+    assert progress["sentence"]["withdrawn_duplicate"] == 1
+    metric = next(m for m in progress["metrics"] if m["key"] == "withdrawn_duplicate")
+    assert metric["href"] == "/e/evt_01/projects.csv?state=withdrawn&duplicate=1"
+    assert _csv_ids(client, bearer, metric["href"]) == ["prj_07"]
+    # Every withdrawal is still one filter away.
+    everything = _csv_ids(client, bearer, "/e/evt_01/projects.csv?state=withdrawn")
+    assert sorted(everything) == sorted(["prj_02", "prj_07", kept])
+    page = client.get("/e/evt_01/progress", **bearer("org")).content.decode("utf-8")
+    assert 'href="/e/evt_01/projects.csv?state=withdrawn&amp;duplicate=1"' in page
+    assert "6 of 6 numbers" in page
+
+
+def test_the_duplicate_filter_is_for_staff_only(client, bearer):
+    public = client.get("/e/evt_01/projects.json?state=withdrawn&duplicate=1").json()
+    assert public["filters"]["duplicate"] == "" and all(row["state"] != "withdrawn" for row in public["items"])
+    staff = client.get("/e/evt_01/projects.json?state=withdrawn&duplicate=1", **bearer("org")).json()
+    assert [row["id"] for row in staff["items"]] == ["prj_07"]
 
 
 def test_merge_keeps_the_withdrawn_duplicate_count_honest(client, bearer):

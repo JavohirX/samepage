@@ -6,7 +6,7 @@ import csv
 import io
 from collections import defaultdict
 
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from samepage.apps.portal.models import (
@@ -32,6 +32,12 @@ SCORE_TAIL = [
 ]
 # The fixture's rubric. An event with other criteria gets c_<key> columns for its own keys.
 SCORE_COLUMNS = SCORE_HEAD + ["c_functionality", "c_quality", "c_innovation"] + SCORE_TAIL
+
+# Withdrawn by a duplicate decision, under either resolution (duplicate_of: or merged_into:).
+# A withdrawal by the team or an organizer is not one, even for a project in a duplicate group.
+DUPLICATE_WITHDRAWAL = Q(state="withdrawn", duplicate_group__isnull=False) & (
+    Q(withdrawn_reason__startswith="duplicate_of:") | Q(withdrawn_reason__startswith="merged_into:")
+)
 
 
 def weights_for(event_id: str) -> dict[str, str]:
@@ -220,17 +226,14 @@ def progress_payload(event_id: str) -> dict:
     )
     full = sum(1 for project_id in active if per_project[project_id] >= 3)
     short = sum(1 for project_id in active if per_project[project_id] < 3)
-    # Withdrawn by a duplicate decision, under either resolution (duplicate_of: or merged_into:).
-    withdrawn = Submission.objects.filter(
-        event_id=event_id, state="withdrawn", duplicate_group__isnull=False
-    ).count()
+    withdrawn = Submission.objects.filter(DUPLICATE_WITHDRAWAL, event_id=event_id).count()
     metrics = [
         {"key": "counted", "value": counted, "label": "counted", "href": f"/e/{event_id}/scores.csv?counted=true"},
         {"key": "excluded", "value": excluded, "label": "excluded", "href": f"/e/{event_id}/scores.csv?counted=false"},
         {"key": "total", "value": total, "label": "total", "href": f"/e/{event_id}/scores.csv"},
         {"key": "fully_reviewed", "value": full, "label": "fully reviewed", "href": f"/e/{event_id}/projects.csv?review=full"},
         {"key": "short", "value": short, "label": "short", "href": f"/e/{event_id}/projects.csv?review=short"},
-        {"key": "withdrawn_duplicate", "value": withdrawn, "label": "withdrawn duplicate", "href": f"/e/{event_id}/projects.csv?state=withdrawn"},
+        {"key": "withdrawn_duplicate", "value": withdrawn, "label": "withdrawn duplicate", "href": f"/e/{event_id}/projects.csv?state=withdrawn&duplicate=1"},
     ]
     # Each number is compared with the CSV its link downloads: the same payload builder the
     # CSV route calls, serialised by the CSV renderer, parsed back and counted.
@@ -296,7 +299,9 @@ def csv_recounts(event_id: str) -> dict[str, int]:
             project_rows(event_id, include_withdrawn=False, query={"review": "short"}, paginate=False)
         ),
         "withdrawn_duplicate": csv_data_rows(
-            project_rows(event_id, include_withdrawn=True, query={"state": "withdrawn"}, paginate=False)
+            project_rows(
+                event_id, include_withdrawn=True, query={"state": "withdrawn", "duplicate": "1"}, paginate=False
+            )
         ),
     }
 
@@ -363,6 +368,10 @@ def project_rows(
         qs = Submission.objects.filter(event_id=event_id, state="withdrawn").select_related("track", "team")
     elif state and state != "all":
         qs = qs.filter(state=state)
+    duplicate = query.get("duplicate") in {"1", "true"}
+    if duplicate:
+        # Only projects a duplicate decision withdrew: the rows behind "withdrawn duplicate".
+        qs = qs.filter(DUPLICATE_WITHDRAWAL)
     review = query.get("review")
     q = (query.get("q") or "").strip()
     tracks = _many(query, "track")
@@ -451,5 +460,5 @@ def project_rows(
         "download_csv": f"/e/{event_id}/projects.csv",
         "download_json": f"/e/{event_id}/projects.json",
         "html_omitted": {},
-        "filters": {"q": q, "track": ",".join(tracks), "tag": ",".join(tags), "state": state or "", "review": review or ""},
+        "filters": {"q": q, "track": ",".join(tracks), "tag": ",".join(tags), "state": state or "", "review": review or "", "duplicate": "1" if duplicate else ""},
     }

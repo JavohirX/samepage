@@ -19,7 +19,7 @@
   ·
   <a href="/e/{{ event_id }}/projects.csv?review=short"><data data-field="short" value="{{ payload.sentence.short }}">{{ payload.sentence.short }} short</data></a>
   ·
-  <a href="/e/{{ event_id }}/projects.csv?state=withdrawn"><data data-field="withdrawn_duplicate" value="{{ payload.sentence.withdrawn_duplicate }}">{{ payload.sentence.withdrawn_duplicate }} withdrawn duplicate</data></a>
+  <a href="/e/{{ event_id }}/projects.csv?state=withdrawn&amp;duplicate=1"><data data-field="withdrawn_duplicate" value="{{ payload.sentence.withdrawn_duplicate }}">{{ payload.sentence.withdrawn_duplicate }} withdrawn duplicate</data></a>
 </p>
 <p class="recount">{{ payload.recount.matched }} of {{ payload.recount.total }} numbers on this page match the row count of the CSV they link to (each CSV is rendered and parsed on this request).</p>
 {% if payload.recount.matched != payload.recount.total %}
