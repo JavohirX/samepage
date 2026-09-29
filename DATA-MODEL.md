@@ -85,7 +85,7 @@ Also in the schema: `samepage_cache` (the sign-in throttle's counter, migration 
 
 ## Package T3 & T4 Extensions
 
-- **Community Voting (T3)**: `voting_config` (enabled, credit budget, participant weight multiplier, voter eligibility), `ballot` (one ballot per voter, quadratic credits allocation), `voting_tally` (audited tally snapshot: participants, public, and combined quadratic influence ranks), `mail_outbox` (dev-mode magic link inbox).
+- **Community Voting (T3)**: `voting_config` (state, opening and closing times, credit budget, which voters are allowed: accounts, open browser sessions, email links), `ballot` (one ballot per voter, quadratic credits allocation), `voting_tally` (audited tally snapshot: participants, public, and combined quadratic influence ranks), `mail_outbox` (one-time voting links for the organizer to pass on; nothing is sent).
 - **Public Comments (T3)**: `project_comment` (project, author, body, state: pending → approved / rejected).
 - **Signed Records (T4)**: `signed_root` (event, publish_seq, Merkle root hash, leaf count, Ed25519 signature, public key PEM, statement), `judge_protocol` (judge evaluation protocol with RFC 9162 Merkle inclusion proofs).
 - **Certificates (T4)**: `team_certificate` (team, certificate number, award title, is_winner, payload sha256, Ed25519 signature, public key PEM, self-contained SVG content).
