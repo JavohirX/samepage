@@ -1,17 +1,30 @@
 {% extends "base.html" %}
 {% block main %}
-<header class="page"><h1>Your batches</h1><p class="tools"><a href="{{ payload.download_csv }}">CSV</a> <a href="{{ payload.download_json }}">JSON</a></p></header>
-<p><data data-field="open" value="{{ payload.open }}">{{ payload.open }}</data> to finish.</p>
+<header class="page">
+  <div>
+    <p class="kicker">Judge console</p>
+    <h1>Your queue</h1>
+    <p class="meta"><data data-field="open" value="{{ payload.open }}">{{ payload.open }}</data> to finish. Only your own assignments are listed; anyone else's scores are refused by the server.</p>
+  </div>
+  <p class="tools"><a href="{{ payload.download_csv }}">CSV</a> <a href="{{ payload.download_json }}">JSON</a></p>
+</header>
 {% if items %}
-<ul class="events">
+<figure>
+<table class="queue">
+  <thead><tr><th>Project</th><th>Track</th><th>Status</th><th></th></tr></thead>
+  <tbody>
   {% for item in items %}
-  <li>
-    <a href="/e/{{ event_id }}/judge/assignments/{{ item.project_id }}">{{ item.title }}</a>
-    <span class="meta">{{ item.track }} · <data data-field="status" value="{{ item.status }}">{{ item.status }}</data>{% if item.batch_state == "abandoned" %} · batch abandoned{% endif %}</span>
-  </li>
+  <tr>
+    <td><a href="/e/{{ event_id }}/judge/assignments/{{ item.project_id }}">{{ item.title }}</a> <span class="id">{{ item.project_id }}</span></td>
+    <td class="mono">{{ item.track }}</td>
+    <td><span class="state{% if item.status == 'final' %} published{% else %} judging{% endif %}"><data data-field="status" value="{{ item.status }}">{{ item.status }}</data></span>{% if item.batch_state == "abandoned" %} <span class="meta">batch abandoned</span>{% endif %}</td>
+    <td class="go">{% if item.status == "final" %}<a href="/e/{{ event_id }}/judge/assignments/{{ item.project_id }}">View</a>{% else %}<a role="button" href="/e/{{ event_id }}/judge/assignments/{{ item.project_id }}">Score →</a>{% endif %}</td>
+  </tr>
   {% endfor %}
-</ul>
+  </tbody>
+</table>
+</figure>
 {% else %}
-<p>No batch assigned yet.</p>
+<p class="banner">No batch assigned to you yet. An organizer issues batches from the event's control panel.</p>
 {% endif %}
 {% endblock %}

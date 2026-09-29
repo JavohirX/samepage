@@ -16,7 +16,8 @@
   {% if payload.video_url %}<a href="{{ payload.video_url }}" rel="nofollow noopener">video</a> · {% endif %}
   <a href="/e/{{ event_id }}/projects/{{ payload.project_id }}">project page</a>
 </p>
-<p data-save-status class="meta">{% if payload.finalized %}final{% else %}{{ payload.state }}, not yet final{% endif %}</p>
+<section class="score-panel">
+<header><span class="kicker">Your score</span><span data-save-status class="state{% if payload.finalized %} published{% else %} judging{% endif %}">{% if payload.finalized %}final{% else %}{{ payload.state }}, not yet final{% endif %}</span></header>
 {% if payload.judging_ends %}<p class="meta">Judging ends {{ payload.judging_ends }} UTC. After that, saving and finalizing are refused unless the organizer moves the end later.</p>{% endif %}
 <form method="post" action="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/scores" data-console data-autosave="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/scores.json" data-csrf="{{ csrf_token }}">
   {% csrf_token %}
@@ -32,6 +33,7 @@
   {# Finalize submits this same form, so it finalizes the values on screen, not the ones the page loaded with. #}
   <button class="secondary" type="submit" formaction="/e/{{ event_id }}/judge/assignments/{{ payload.project_id }}/finalize">Finalize</button>
 </form>
-<p class="meta">Keys 1–5 score the selected criterion. J and K move between criteria. Autosave needs JavaScript. The buttons work without it. A draft is not counted in the results until you finalize it.</p>
+<p class="meta">Keys <kbd>1</kbd>–<kbd>5</kbd> score the selected criterion. <kbd>J</kbd> and <kbd>K</kbd> move between criteria. Autosave needs JavaScript. The buttons work without it. A draft is not counted in the results until you finalize it.</p>
+</section>
 <script src="{% static 'console.js' %}"></script>
 {% endblock %}

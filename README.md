@@ -15,7 +15,7 @@ docker compose up --wait          # builds, migrates, seeds — one command
 python run.py .dogfood.toml       # last line: claimed T1 T2, verified T1 T2
 ```
 
-Then open http://localhost:8080. The demo bar at the top switches between Organizer (`organizer@example.org`), Judge A (`marek.nowak@example.org`), Judge B (`priya.nair@example.org`), Participant (`priya1@example.org`) and Admin (`admin@example.org`) with one click (or sign in with password `samepage-demo`).
+Then open http://localhost:8080. It asks who you are: pick a role (Participant, Judge, Organizer or Admin), sign in, and you land on that role's own panel. In demo mode the sign-in screen lists the demo accounts (password `samepage-demo`); one click fills the form. After that, the demo strip at the top of every page switches account with one click.
 Tour the workflow in [DEMO.md](DEMO.md). Full evaluation map in [REVIEWING.md](REVIEWING.md).
 
 ### Scoreboard
@@ -55,16 +55,16 @@ The first build pulls the base images (pinned by digest, amd64 and arm64) and th
 
 ## Demo logins (evaluation only)
 
-`docker compose up` starts in demo mode (`SAMEPAGE_MODE=demo`), which is open on purpose so you can try every role. Every page has a demo bar with one button per account; each button is a POST with a CSRF token, so a link or an image on another site cannot sign a browser in. Every demo account also takes the password `samepage-demo` at `/login`. For curl, `.dogfood.toml` holds four `Authorization: Bearer sp_demo_…` headers, and `docker compose logs app` prints them at every boot.
+`docker compose up` starts in demo mode (`SAMEPAGE_MODE=demo`), which is open on purpose so you can try every role. The sign-in screen at `/` asks for an email, a password and a role, and lands on that role's panel; signing in as a role the account does not hold is refused with 403 (the role only picks the landing page; every request is still checked against the policy table). In demo mode it lists the demo accounts, and every page has a demo strip with one button per account; each button is a POST with a CSRF token, so a link or an image on another site cannot sign a browser in. Every demo account takes the password `samepage-demo`. For curl, `.dogfood.toml` holds four `Authorization: Bearer sp_demo_…` headers, and `docker compose logs app` prints them at every boot.
 
 | Button | Account | What it can do | Lands on |
 |---|---|---|---|
 | Organizer | organizer@example.org | organizes evt_01 and evt_02 | `/e/evt_01/progress` |
 | Judge A | marek.nowak@example.org (fixture judge jdg_08) | judges track trk_04 of evt_01 | `/e/evt_01/judge/batches` |
 | Judge B | priya.nair@example.org (fixture judge jdg_03) | judges tracks trk_04 and trk_05 of evt_01 | `/e/evt_01/judge/batches` |
-| Participant | priya1@example.org | on team tm_01 (NorthKiln) of evt_01 | `/e/evt_01/projects` |
-| Participant (open event) | control@example.org | on the only team of evt_02 | `/e/evt_02/projects` |
-| Admin | admin@example.org | global admin: creates events, organizes every event | `/e/evt_01/progress` |
+| Participant | priya1@example.org | on team tm_01 (NorthKiln) of evt_01 | `/e/evt_01/teams/tm_01` |
+| Participant (open event) | control@example.org | on the only team of evt_02 | its team page on evt_02 |
+| Admin | admin@example.org | global admin: creates events, organizes every event | `/` (the admin panel) |
 
 The tokens are HMACs of a string in this repository, so they are the same on every fresh volume and anyone with the source can compute them. Never expose demo mode to a network. Production mode (`SAMEPAGE_MODE=production`, the default outside compose) seeds nothing, answers 404 to the demo buttons, 401 to a demo token, never accepts the demo password, and refuses to start while any demo credential or default secret is left ([OPERATIONS.md](OPERATIONS.md#production)). Anyone can also create a real account at `/signup`, in either mode.
 

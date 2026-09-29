@@ -72,7 +72,17 @@ def to_csv(payload: dict) -> str:
     return buffer.getvalue()
 
 
-def render_payload(request, payload: dict, fmt: str | None, *, template: str, status: int = 200, public_cache: bool = False):
+def render_payload(
+    request,
+    payload: dict,
+    fmt: str | None,
+    *,
+    template: str,
+    status: int = 200,
+    public_cache: bool = False,
+    extra: dict | None = None,
+):
+    """One payload as JSON, CSV or HTML. `extra` reaches the HTML template only, never JSON or CSV."""
     chosen = negotiate(request, fmt if fmt is not None else getattr(request, "samepage_fmt", None))
     if chosen == "json":
         body = json.dumps(payload, ensure_ascii=False, default=str)
@@ -86,6 +96,26 @@ def render_payload(request, payload: dict, fmt: str | None, *, template: str, st
         if principal is None and getattr(request.user, "is_authenticated", False):
             principal = request.user
         roles = roles_of(principal, payload.get("event"))
+        lifecycle = []
+        if roles & {"organizer", "admin"} and payload.get("event"):
+            from samepage.apps.portal.models import Event
+
+            state = Event.objects.filter(id=payload.get("event")).values_list("state", flat=True).first()
+            steps = ("draft", "open", "closed", "judging", "published")
+            reached = steps.index(state) if state in steps else len(steps)
+            lifecycle = [
+                {"name": step, "mark": "now" if i == reached else ("done" if i < reached else "")}
+                for i, step in enumerate(steps)
+            ]
+        my_team = ""
+        if "participant" in roles:
+            from samepage.apps.portal.models import TeamMember
+
+            my_team = (
+                TeamMember.objects.filter(event_id=payload.get("event"), person=principal)
+                .values_list("team_id", flat=True)
+                .first()
+            ) or ""
         context = {
             "payload": payload,
             "columns": payload.get("columns") or [],
@@ -95,6 +125,10 @@ def render_payload(request, payload: dict, fmt: str | None, *, template: str, st
             "event_id": payload.get("event"),
             "is_staff": bool(roles & {"organizer", "admin"}),
             "is_judge": "judge" in roles,
+            "my_roles": [role for role in ("admin", "organizer", "judge", "participant") if role in roles],
+            "my_team": my_team,
+            "lifecycle": lifecycle,
+            **(extra or {}),
         }
         response = render(request, template, context, status=status)
     return annotate(response, request, fmt=fmt if fmt is not None else getattr(request, "samepage_fmt", None), public_cache=public_cache)

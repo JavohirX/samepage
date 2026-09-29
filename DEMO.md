@@ -1,10 +1,10 @@
 # Demo
 
-`docker compose up --wait`, then open http://localhost:8080. Every step below is a real request to the portal; the buttons in the demo bar are POSTs that sign the browser in as that account. Demo mode is for evaluation only: the accounts, the password `samepage-demo` and the tokens are public (README, Demo logins).
+`docker compose up --wait`, then open http://localhost:8080. The first screen asks for a role, an email and a password; pick a demo account on the right to fill them in, and you land on that role's panel. Every step below is a real request to the portal; the buttons in the demo strip at the top of every page are POSTs that sign the browser in as that account. Demo mode is for evaluation only: the accounts, the password `samepage-demo` and the tokens are public (README, Demo logins).
 
 ## A whole event in five minutes
 
-1. **Create the event.** Press **Admin**, open the home page, **New event**. Name, a deadline a few minutes from now (UTC), two tracks, a prize, a rubric such as `Impact: 2` and `Craft: 1`, and a required question `License: MIT, Apache-2.0*`. You land on the event's settings page. Press **Move to open**.
+1. **Create the event.** Press **Admin** (you land on the admin panel), **New event**. Name, a deadline a few minutes from now (UTC), two tracks, a prize, a rubric such as `Impact: 2` and `Craft: 1`, and a required question `License: MIT, Apache-2.0*`. You land on the event's settings page. Press **Move to open**.
 2. **Form a team.** Sign out, **Sign in**, then **Create one** (sign-up). On the event page press **Start a team**. On the team page press **Create an invite link** and copy it. In a private window, sign up a second person and open the link: **Join**.
 3. **Submit.** Back as the first person: **Start the submission**, fill the fields, leave "Submit now" unticked. The draft is not in the gallery. **Edit** it, add a thumbnail under Images, answer the license question, then **Submit**. It is now in the gallery; search for a tag to find it.
 4. **Invite judges.** As Admin, on the settings page under *Judges and organizers*, add a judge by email. The next page shows a one-time set-password link; open it in another private window and choose a password. (An address that already has an account gets an acceptance link instead: it becomes a judge only after signing in to that account and pressing **Accept**.)
