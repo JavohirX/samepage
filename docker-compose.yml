@@ -18,20 +18,20 @@ services:
     init: true
     restart: unless-stopped
     user: "10001:10001"
+    mem_limit: 768m
     environment:
       SAMEPAGE_MODE: ${SAMEPAGE_MODE:-demo}
       OPENBLAS_NUM_THREADS: "1"
-      PORT: ${PORT:-8080}
+      PORT: ${PORT:-21500}
       DB_OWNER_URL: postgres://owner:${DB_OWNER_PASSWORD:-demo-owner}@db:5432/samepage
       DB_APP_PASSWORD: ${DB_APP_PASSWORD:-demo-app}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
       SECRET_KEY: ${SECRET_KEY:-}
-      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
-      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://0.0.0.0:8080}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:21500}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:21500,http://127.0.0.1:21500,https://*.vercel.app}
       MEDIA_ROOT: /data/media
     ports:
-      - "${SAMEPAGE_BIND_ADDR:-0.0.0.0}:${PORT:-8080}:8000"
-      - "0.0.0.0:80:8000"
+      - "${SAMEPAGE_BIND_ADDR:-0.0.0.0}:${PORT:-21500}:8000"
     volumes:
       - media:/data/media
     read_only: true
@@ -55,6 +55,7 @@ services:
     # Multi-arch index, pinned by tag and digest.
     image: postgres:16.15-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     restart: unless-stopped
+    mem_limit: 512m
     environment:
       POSTGRES_USER: owner
       POSTGRES_PASSWORD: ${DB_OWNER_PASSWORD:-demo-owner}

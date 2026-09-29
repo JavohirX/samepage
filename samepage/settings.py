@@ -46,6 +46,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "samepage.core.middleware.CorsMiddleware",
     "samepage.core.middleware.CorrelationMiddleware",
     "samepage.core.middleware.BearerCSRFBypass",
     "django.middleware.security.SecurityMiddleware",
