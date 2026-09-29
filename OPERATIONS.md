@@ -136,6 +136,8 @@ Then `python run.py .dogfood.toml` works unchanged, and so do `python tools/orac
 
 `python`, not `python3`. `curl.exe`, not `curl`. Line endings are LF (`.gitattributes`). The entrypoint is Python, not a shell script, so a CRLF checkout does not break boot.
 
+`runserver` listens on the one address in `BIND`, 127.0.0.1 above. Windows tries `::1` first for `localhost`, so every request to `http://localhost:8080` waits for that attempt to fail before it reaches the portal, about 2 seconds each. `run.py .dogfood.toml` still passes, only slower. For a quick native run, use a copy of `.dogfood.toml` with `base_url = "http://127.0.0.1:8080"`. Keep the committed file as it is, because it serves the compose path.
+
 ## If someone forks this
 
 1. Run production mode on a new database until it boots clean.
