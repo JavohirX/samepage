@@ -1,6 +1,6 @@
 # Demo
 
-`docker compose up --wait`, then open http://localhost:8080. Every step below is a real request to the portal; the buttons in the demo bar are POSTs that sign the browser in as that account.
+`docker compose up --wait`, then open http://localhost:8080. Every step below is a real request to the portal; the buttons in the demo bar are POSTs that sign the browser in as that account. Demo mode is for evaluation only: the accounts, the password `samepage-demo` and the tokens are public (README, Demo logins).
 
 ## A whole event in five minutes
 
@@ -13,13 +13,13 @@
 7. **Weights and progress.** As Admin, change a weight on the settings page: `scores.csv` shows the new weighted totals and the results refit on the next read. With one judge the reviews cannot show a judge's lean, so the results page says `raw_fallback`: the plain mean of the weighted totals, no judge adjustment, and the new weights still reorder it. Progress lists judges with open work first.
 8. **Publish.** Results → **Publish results**. Sign out: the results page is now public, and it is frozen: a late finalize, a weight change or a new assignment is 409.
 
-`python tools/lifecycle_check.py --admin-email admin@example.org` (with `SAMEPAGE_ADMIN_PASSWORD=samepage-demo`) does steps 1–8 over HTTP in about a minute and prints every request.
+`python tools/lifecycle_check.py --admin-email admin@example.org` (with `SAMEPAGE_ADMIN_PASSWORD=samepage-demo` in the environment) does the same over HTTP, with three teams and three judges but without images or a weight change, in under a minute, and prints every request.
 
 ## The fixture (evt_01)
 
 1. Press **Organizer**. Progress reads "121 counted + 5 excluded = 126". Open the excluded link: five rows, all prj_07, reason `withdrawn_duplicate:dup_01`. The footer says the six numbers match the CSVs they link to, recomputed from those CSVs on every load.
-2. Open Duplicates, `dup_01`. The rule is "same team and (same repo or same title)"; keep-latest puts prj_41 at rank 9, merge retargets the withdrawn reviews and prints the other rank. Publish is refused (409) until a person confirms it.
-3. Open the lab. λ is about 15.324. Z-scores are listed as failures where a judge has no usable variance (jdg_07 gave 4/4/4 to everything; jdg_23 has one review), and the flags table names jdg_07 as the one straight-line judge.
+2. Open Duplicates, `dup_01`. The rule is "same team and (same repo or same title)"; keep-latest puts prj_41 at rank 9, and the preview for merge, which retargets the withdrawn reviews, puts it at rank 17. Publish is refused (409) until a person confirms one of them.
+3. Open the lab. λ is about 15.324. Z-scores are listed as failures for the four judges with no usable variance (jdg_07 gave 4/4/4 to everything and jdg_19's three totals are equal; jdg_12 and jdg_23 have one counted review each), and the flags table names jdg_07 as the one straight-line judge. The first table is each judge's lean: the largest is jdg_02 at +0.144.
 4. In a terminal: `docker compose --profile oracle run --rm oracle`. statsmodels gets the same λ and the same ranking hash as the results page.
 5. Press **Judge A**. The console has two open projects (the demo seed's `run_demo` batch). Finalize one; the organizer's results now count it. As **Judge B**, `/e/evt_01/judges/jdg_08/scores.json` is 403.
 6. As a stranger, `/e/evt_01/projects` shows Glass Signal, Small Meadow and Deep Compass first. `/e/evt_01/results` is 403 until an organizer publishes.
