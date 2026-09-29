@@ -1,8 +1,15 @@
 """Profile REML for y = X a + Z b + e, with one random intercept per judge.
 
-λ = σ²/τ². The grid is part of the method: t = ln λ, stage 1 steps 0.05 from
-ln 0.1 across 185 points, stage 2 steps 0.001 across ±0.05 around the stage-1
-maximiser (286 evaluations). Ties keep the earlier point.
+Invariant: Deterministic profile REML likelihood maximization using the Woodbury
+matrix identity on a fixed 2-stage grid (185 points stage 1, 101 points stage 2).
+Independent implementations (like statsmodels) reproduce the exact same λ and
+ranking hash only if they search the exact same points.
+
+Why: Woodbury formula evaluates (I + g Z Zᵀ)⁻¹ in O(J³) time rather than O(N³),
+enabling fast evaluation across 286 grid points without numerical drift.
+
+Rejected alternative: Gradient descent / L-BFGS optimizer, which terminates at
+slightly different local points across platforms, BLAS versions, and compilers.
 """
 
 from __future__ import annotations

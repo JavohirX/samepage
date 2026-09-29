@@ -1,4 +1,15 @@
-"""Resolve a principal's roles, then ask the policy tables. No target row is loaded here."""
+"""Resolve a principal's roles for an event context, then enforce policy.
+
+Invariant: Policy check occurs before loading any target row from the database (D11).
+Forbidden requests raise PermissionDenied (403) immediately without revealing
+whether the target object exists.
+
+Why: Prevents ID enumeration and unauthorized existence probing (e.g. peer judges
+scanning other judges' scores).
+
+Rejected alternative: Object-level permissions checked after loading the model
+instance, which leaks object existence via 404 vs 403 discrepancies.
+"""
 
 from __future__ import annotations
 

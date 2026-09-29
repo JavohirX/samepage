@@ -1,4 +1,15 @@
-"""SamepageView. Every URL resolves to a subclass. Policy runs before any target id is loaded."""
+"""Base view class (`SamepageView`) unifying HTML, JSON, and CSV rendering pipelines (D1).
+
+Invariant: Policy check (`require()`) executes in `initial()` before any view
+handler or database query. NUL bytes in query parameters or payload body are
+rejected with 422 before reaching PostgreSQL.
+
+Why: Guarantees consistent authentication, authorization, content negotiation,
+and error handling across all representations without code duplication.
+
+Rejected alternative: Separate view hierarchies for Web UI and REST API, which
+inevitably diverge in validation rules and access control.
+"""
 
 from __future__ import annotations
 

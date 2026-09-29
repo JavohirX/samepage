@@ -1,9 +1,15 @@
-"""Snapshots, the lab, and publish. The CSV ledger does not wait on this module.
+"""Snapshot orchestration, normalization lab, and publishing lifecycle.
 
-A snapshot records the fingerprint of its inputs (counted reviews with their weights, the
-projects being ranked, the event's judges). Before publish, a read whose fingerprint no
-longer matches refits first, so the ranking is never stale. Publish stamps one snapshot;
-from then on every reader gets that snapshot, and the write paths refuse changes (guards.py).
+Invariant: Results refit on read whenever input fingerprint changes, holding a
+database row lock so concurrent reads never fit twice (D14). Publishing stamps a
+permanent snapshot and permanently freezes all score writes via database triggers
+and application guards (D15). The CSV ledger does not wait on this module.
+
+Why: Decouples scoring performance from model fitting overhead while guaranteeing
+zero staleness on read.
+
+Rejected alternative: Refit synchronously on every review finalization, which
+serializes concurrent judge writes and degrades responsiveness.
 """
 
 from __future__ import annotations

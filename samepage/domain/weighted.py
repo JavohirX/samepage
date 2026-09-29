@@ -1,4 +1,16 @@
-"""Weighted rubric totals as exact fractions."""
+"""Weighted rubric totals computed as exact fractions (`fractions.Fraction`).
+
+Invariant: All weight sums Σ w·v / Σ w are computed in infinite-precision rational
+arithmetic without floating-point rounding errors. Zero dependencies outside the
+Python standard library.
+
+Why: Preserves mathematical correctness and exact tie detection regardless of
+rubric weight magnitudes.
+
+Rejected alternative: IEEE 754 floating point arithmetic (`float`), which produces
+representation artifacts (e.g. 0.1 + 0.2 != 0.3) and arbitrary tie-breaking
+discrepancies across CPU architectures.
+"""
 
 from __future__ import annotations
 

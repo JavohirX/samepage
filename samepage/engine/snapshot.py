@@ -1,4 +1,19 @@
-"""One snapshot: raw, z, REML, k=10, intervals, sensitivity, leave-one-judge-out, flags."""
+"""Compute one results snapshot: raw means, z-scores, REML fit, k=10 shrinkage,
+rank intervals, sensitivity analysis, leave-one-judge-out, and judge flags.
+
+Invariant: a snapshot records a fingerprint of its inputs (counted reviews,
+weights, project set, judge set). A read whose fingerprint disagrees refits
+before serving. This makes staleness impossible: a new finalized score, a weight
+change, or a duplicate decision is in the next page anyone sees.
+
+Refitting happens on read, not on write (D14): a judge finalizing 30 projects
+does not wait for 30 fits. When the fit fails or times out, the fallback is
+ranking by mean weighted total, and the results page says so.
+
+Rejected alternative: refit on write. A write-time fit would serialize judges
+and add seconds to every finalization, with no benefit — the fingerprint already
+ensures freshness.
+"""
 
 from __future__ import annotations
 

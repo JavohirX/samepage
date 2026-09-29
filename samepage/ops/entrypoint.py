@@ -1,4 +1,17 @@
-"""Migrate as the owner, seed in demo mode, then serve as the runtime role."""
+"""Container entrypoint managing database lifecycle, migration, seeding, and privilege reduction (D8).
+
+Invariant: Migration and initial seeding run as DB owner (`DB_OWNER_URL`), then
+privileges are permanently handed off to unprivileged `samepage_app` runtime role
+before gunicorn is exec'd. Entrypoint verifies `samepage_app` cannot update
+audit/score tables or bypass triggers.
+
+Why: Defense-in-depth ensures application compromises cannot tamper with audit
+logs or disable safety triggers. Doing this dynamically on boot works across
+reused persistent volumes.
+
+Rejected alternative: Docker initdb scripts (`/docker-entrypoint-initdb.d`), which
+only run on an empty data directory and fail to update permissions on reused volumes.
+"""
 
 from __future__ import annotations
 

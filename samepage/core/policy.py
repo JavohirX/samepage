@@ -1,7 +1,14 @@
-"""One policy source. Scope is derived from these tables, never stored beside them.
+"""One declarative policy table for all actions and roles.
 
-`allows` is pure: callers resolve roles and the target id before they ask.
-The view still calls it before it loads the target row.
+Invariant: Authorization rules live strictly in this file, evaluated before any
+target database row is loaded (D11). `allows()` is pure with zero side-effects
+or database queries.
+
+Why: Centralized authorization matrix eliminates per-view permission drift and
+enables comprehensive combinatorial testing (`tests/test_authz_matrix.py`).
+
+Rejected alternative: Distributed view-level or object-level permission decorators,
+which make auditability difficult and risk silent authorization leaks.
 """
 
 from __future__ import annotations
