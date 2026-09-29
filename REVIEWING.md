@@ -6,9 +6,9 @@ A rubric-to-evidence map for evaluators. Every claim links to the file or comman
 
 | Claim | Evidence | Command |
 |---|---|---|
-| T1 gallery is public | `samepage/core/policy.py` line 21: `gallery.read` → `EVERYONE` | `curl http://localhost:8080/e/evt_01/projects` (no auth, 200) |
+| T1 gallery is public | `samepage/core/policy.py` `ACTION_POLICY["gallery.read"]` → `EVERYONE` | `curl http://localhost:8080/e/evt_01/projects` (no auth, 200) |
 | T1 deadline enforced server-side | `samepage/apps/portal/migrations/` SQL triggers + `samepage/services/submissions.py` | `run.py` check 3 (PASS) |
-| T2 judge sees own scores | `samepage/core/policy.py` line 36: `scores.read_own` → `{JUDGE}` | `run.py` check 4 (PASS) |
+| T2 judge sees own scores | `samepage/core/policy.py` `ACTION_POLICY["scores.read_own"]` → `{JUDGE}` | `run.py` check 4 (PASS) |
 | T2 judge cannot see peer scores | `samepage/services/access.py` → 403 before id resolution (D11) | `run.py` checks 5-6 (PASS); `curl -H "Authorization: Bearer <judge_b>" .../judges/jdg_08/scores` → 403 |
 | T2 CSV export | One URL, three formats through `samepage/core/views.py` | `run.py` check 7 (PASS) |
 | T1+T2 verified 7/7 | [acceptance-report.txt](acceptance-report.txt) | `python run.py .dogfood.toml` |

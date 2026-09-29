@@ -1,9 +1,11 @@
 # Samepage
 
-[![CI](https://github.com/JavohirX/samepage/actions/workflows/acceptance.yml/badge.svg)](https://github.com/JavohirX/samepage/actions/workflows/acceptance.yml)
+[![CI](https://github.com/JavohirX/samepage/actions/workflows/acceptance.yml/badge.svg?branch=prod)](https://github.com/JavohirX/samepage/actions/workflows/acceptance.yml?query=branch%3Aprod)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 A self-hosted hackathon judging portal where every number on a page opens as the rows behind it, every list is also a CSV and a JSON from one policy check, and an independent statsmodels image re-derives the published ranking from the `scores.csv` an organizer downloads.
+
+This is `prod`, the branch submitted for judging, and everything below describes it. `main` and `live` carry a public demo deployment (extra seeded accounts, a separate web frontend) and are not part of this submission.
 
 ### Judge this in 5 minutes
 
@@ -72,7 +74,7 @@ What the seed holds:
 
 [DEMO.md](DEMO.md) walks one new event from creation to published results, then tours the fixture.
 
-## Tiers
+## Tier details
 
 `run.py` has checks for T1 and T2 only, so `.dogfood.toml` claims T1 and T2. It checks seven things; everything else in these tables is checked by the tests in `tests/` and by `tools/lifecycle_check.py`, which drives one whole event over HTTP (CI runs it in production mode on an empty database).
 
@@ -100,20 +102,21 @@ What the seed holds:
 | Cross-judge normalization | Built. An additive judge-bias model fit by profile REML on a fixed grid, shown beside raw means and the Raptors k=10 shrinkage ([JUDGING.md](JUDGING.md)). Only finalized reviews count. Results refit when their inputs change and freeze at publish. statsmodels reproduces the ranking. |
 | CSV at every stage | Built. Events, projects, teams, people, rubric, scores, progress, assignments, assignment runs, results, the lab tables, duplicates and the audit log; a judge's own scores and batches. Formula-guarded cells, no literal `null`. `run.py` check 7. |
 
-### T3 Community & Public Engagement: Built & Verified
+### T3 and T4: built and tested, not claimed
 
-- **Quadratic Community Voting**: Quadratic credit allocations (`sum(credits^2) <= budget`), separate participant and public voting channels with configurable influence multipliers, voter email magic links, and audited tally snapshots (`/e/<event>/voting`, `/tally`).
-- **Public Comments & Pre-moderation**: Public project comments with pre-moderation queue (`pending` → `approved`/`rejected`), comment rate throttles, and organizer moderation controls (`/e/<event>/projects/<project>/comments`, `/comments`).
+`run.py` has no checks for T3 or T4, so `.dogfood.toml` does not claim them and the acceptance report says nothing about them. Each item has its own tests, which run in the same suite as everything else.
 
-### T4 Advanced Verification, Distribution & Ecosystem: Built & Verified
-
-- **S7 Signed Evaluation Records & Judge Protocols**: RFC 9162 Merkle tree calculated over all counted reviews, Ed25519 signature over Merkle root (`root.txt`, `root.sig`, `pub.pem`, `/records/root`), and judge protocol generation with cryptographic audit inclusion proofs (`/e/<event>/judge/protocol`).
-- **S8 Self-Contained SVG Certificates**: High-fidelity award certificates generated as stand-alone SVG images with embedded Ed25519 cryptographic signatures and public keys, verifiable online or offline (`/certificates/<cert_no>`, `/e/<event>/teams/<team>/certificate.svg`).
-- **S9 Distribution-First Feedback Packs**: Team feedback packs with percentile rankings, ASCII/Unicode score distribution histograms, per-criterion means, anonymous judge comments, and audited organizer release gating (`/e/<event>/teams/<team>/feedback`, `/feedback`).
-- **S10 Embeddable Gallery Widget**: Standalone embed widget script (`widget.js`) with responsive card layout, CORS headers, and embed code generator (`/e/<event>/embed`).
-- **S11 OpenAPI 3.0 Specification & Swagger UI**: Full OpenAPI 3.0 schema generation at `/openapi.json` and `/api/v1/openapi.json` with interactive Swagger UI at `/docs`.
-- **S12 Webhooks & Outbox Worker**: Standard Webhooks HMAC-SHA256 signatures (`webhook-id`, `webhook-timestamp`, `webhook-signature`), SSRF safety validation, and background delivery worker (`deliver_webhooks`).
-- **S13 Portable Event Bundle Import & Export**: Roundtrip event export and import (`/e/<event>/export.json`, `POST /e/import.json`) matching and extending the native `fixtures.json` format.
+| Item | What it does | Tests |
+|---|---|---|
+| Community voting (T3) | Quadratic voting: a voter spreads a credit budget (25 by default) over projects, and c credits on one project give it √c influence. Participants and the public are tallied separately and combined. Voters use an account, a browser session, or an email address with a one-time link that is written to an outbox for the organizer to pass on (nothing is sent). `/e/<event>/voting`, `/e/<event>/voting/tally`. | `tests/test_voting.py` |
+| Public comments (T3) | A comment on a project waits in a queue until an organizer approves or rejects it; posting is throttled. `/e/<event>/projects/<project>/comments`, `/e/<event>/comments`. | `tests/test_comments.py` |
+| Signed records (T4) | Once results are published: a Merkle tree (RFC 9162 hashing) over the counted reviews, its root signed with Ed25519 at `/e/<event>/records/root.txt`, `root.sig` and `pub.pem`, and a judge's protocol with inclusion proofs at `/e/<event>/judge/protocol`. | `tests/test_signing.py` |
+| Certificates (T4) | SVG certificates that carry an Ed25519 signature and the public key, looked up by number. `/certificates/<cert_no>`, `/e/<event>/teams/<team>/certificate.svg`. | `tests/test_certificates.py` |
+| Feedback packs (T4) | Per team: percentile, per-criterion means, a text histogram of the distribution and the judges' comments without their names, visible to the team once an organizer releases them. `/e/<event>/teams/<team>/feedback`. | `tests/test_feedback.py` |
+| Embed widget (T4) | `/static/widget.js` and an embed-code page at `/e/<event>/embed`. | route rows in `tests/test_authz_matrix.py` |
+| OpenAPI (T4) | OpenAPI 3.0 schema from drf-spectacular at `/openapi.json` and `/api/v1/openapi.json`; Swagger UI at `/docs`. | `tests/test_openapi.py` |
+| Webhooks (T4) | Standard Webhooks signing (HMAC-SHA256; `webhook-id`, `webhook-timestamp`, `webhook-signature`), target URLs on loopback, private or link-local addresses refused, and an outbox that `manage.py deliver_webhooks` delivers. `/e/<event>/webhooks`. | `tests/test_webhooks.py` |
+| Event bundles (T4) | `GET /e/<event>/export.json` and `POST /e/import.json` (admins). The bundle format is a superset of `fixtures.json`; `fixtures.json` itself imports. A round trip keeps every project, score, judge, track and criterion. | `tests/test_bundle.py` |
 
 ## What's different here: 5 showcase items
 
@@ -207,7 +210,7 @@ Every file below is the output of a command, not typed. CI ([`.github/workflows/
 |---|---|
 | Refusal lives in the backend and covers HTML, JSON and CSV. A judge asking for another judge's scores gets 403, not an empty page. | That a database superuser cannot edit a row directly in the database. Core T1/T2 detects alterations via the audit hash chain and downloaded CSVs (T4 adds optional RFC 9162 Merkle root signing and judge protocols). |
 | The REML fit is the GLS estimator at the λ that maximises the profile likelihood on a fixed grid. statsmodels, an independent implementation, gets the same λ and ranking. A dense inverse agrees with the Woodbury form to about 1e-15 on the seed (the test asserts 1e-9). | That the model suits this data. The project signal is small: the results page says the top 5 is a statistical tie across ranks 1 to 15. |
-| The progress numbers equal the row counts of the CSVs they link to, checked on every request. | Anything about T3 or T4. We do not claim them. |
+| The progress numbers equal the row counts of the CSVs they link to, checked on every request. | Anything about T3 or T4: the checker has no checks for them, so we do not claim them. Their tests are listed under [T3 and T4](#t3-and-t4-built-and-tested-not-claimed). |
 
 ## Limits
 
@@ -216,7 +219,6 @@ Known gaps, not hidden:
 - **Nothing is emailed.** Team invite links, set-password links and role acceptance links are shown once, to the person who created them, to pass on by hand. There is no self-service password reset: an operator runs `python manage.py changepassword <email>`.
 - **HTTPS behind a proxy is not ready.** With a reverse proxy that terminates TLS and forwards plain HTTP, Django sees `http` while the browser sends `Origin: https://…`, so every browser form post, sign-in included, fails the CSRF check with 403. There is no `SECURE_PROXY_SSL_HEADER` or `CSRF_TRUSTED_ORIGINS` setting yet. Plain HTTP (demo mode, CI) works.
 - **No API tokens outside demo mode.** Bearer tokens are only the seeded demo ones. A script against a production instance signs in with `POST /login` and sends the session cookie and CSRF token, as `tools/lifecycle_check.py` does.
-- **Bulk import/export.** Full event bundles are imported via `POST /e/import.json` (admin only) and exported via `GET /e/<event>/export.json`.
 - **Conflicts of interest are partly manual.** The matcher and manual assignment exclude a judge whose email is on the team, and any row in the `coi` table, but no page or route writes that table: an operator adds a declared conflict with SQL. Likewise a per-submission `deadline_exception` row is honoured by the triggers but has no route.
 - **Deletion.** Tracks, prize categories and events cannot be deleted, only added; event states only move forward. An issued assignment cannot be withdrawn, only its batch abandoned (its unfinished work is then topped up to other judges). There is no retention or account deletion tooling; an operator deletes rows with SQL.
 - **The public gallery shows every track to everyone, judges included.** Track scoping applies to judging: a judge is assigned, opens in the console and scores only projects in their tracks, and reads only their own scores.
