@@ -1,15 +1,13 @@
 """Weighted rubric totals computed as exact fractions (`fractions.Fraction`).
 
-Invariant: All weight sums Σ w·v / Σ w are computed in infinite-precision rational
-arithmetic without floating-point rounding errors. Zero dependencies outside the
-Python standard library.
+Invariant: Σ w·v / Σ w is a `fractions.Fraction`, never a float, until it is
+rendered. Standard library only.
 
-Why: Preserves mathematical correctness and exact tie detection regardless of
-rubric weight magnitudes.
+Why: two reviews with the same total compare equal, so a tie is a real tie and the
+documented tie-break (JUDGING.md) decides the order, not rounding.
 
-Rejected alternative: IEEE 754 floating point arithmetic (`float`), which produces
-representation artifacts (e.g. 0.1 + 0.2 != 0.3) and arbitrary tie-breaking
-discrepancies across CPU architectures.
+Rejected alternative: `float`, where the same total reached in a different order can
+differ in the last bit (0.1 + 0.2 != 0.3) and silently break a tie.
 """
 
 from __future__ import annotations

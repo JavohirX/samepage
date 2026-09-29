@@ -1,12 +1,14 @@
 """Snapshot orchestration, normalization lab, and publishing lifecycle.
 
-Invariant: Results refit on read whenever input fingerprint changes, holding a
-database row lock so concurrent reads never fit twice (D14). Publishing stamps a
-permanent snapshot and permanently freezes all score writes via database triggers
-and application guards (D15). The CSV ledger does not wait on this module.
+Invariant: results refit on read whenever the input fingerprint changes, holding
+a row lock on the event so two readers never fit twice (D14). Publish stamps one
+snapshot; after that every write that could change the ranking answers 409
+(`services/guards.refuse_if_published`), and a final score can change only through
+an audited unlock, which a trigger enforces (D15). The CSV ledger does not wait on
+this module.
 
-Why: Decouples scoring performance from model fitting overhead while guaranteeing
-zero staleness on read.
+Why: a judge finalizing a review never waits for a fit, and the fingerprint means a
+stale ranking is never served.
 
 Rejected alternative: Refit synchronously on every review finalization, which
 serializes concurrent judge writes and degrades responsiveness.

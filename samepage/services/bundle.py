@@ -1,7 +1,7 @@
 """Bundle import and export service (S13).
 
 A JSON event bundle that is a strict superset of fixtures.json format.
-Round-trip export -> import -> same results hash.
+A round trip keeps every project, score, judge, track and criterion (tests/test_bundle.py).
 """
 
 from __future__ import annotations
