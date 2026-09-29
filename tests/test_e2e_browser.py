@@ -21,6 +21,7 @@ from django.utils import timezone
 
 from conftest import needs_db
 from samepage.apps.portal.models import Event, Person, Submission, Track
+from samepage.services.clock import db_now
 
 pytestmark = [needs_db, pytest.mark.django_db]
 
@@ -156,7 +157,7 @@ def test_a_whole_event_through_the_html_forms():
         judges.append((Person.objects.get(email=f"judge{index}@example.org").id, judge))
 
     # 5. The deadline passes: an edit is refused; the event moves to judging; batches are issued.
-    Event.objects.filter(id=event_id).update(submissions_close=timezone.now() - timedelta(seconds=1))
+    Event.objects.filter(id=event_id).update(submissions_close=db_now() - timedelta(seconds=1))
     _, page = lead.post(f"/e/{event_id}/projects/{project_id}", {"title": "Too late", "track": tools}, status=409)
     assert "submissions closed at" in page
     assert Submission.objects.get(id=project_id).title == "Night Shift"

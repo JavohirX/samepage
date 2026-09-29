@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from conftest import needs_db
 from samepage.apps.portal.models import Event, Person, ResultsSnapshot, Track
+from samepage.services.clock import db_now
 
 pytestmark = [needs_db, pytest.mark.django_db]
 
@@ -58,7 +59,7 @@ def _two_by_two_event() -> tuple[Client, str, dict[str, str]]:
         browser = Client()
         assert browser.post("/" + added["password_link"].split("/", 3)[3], {"password": "small judge password"}).status_code == 303
         judges.append(browser)
-    Event.objects.filter(id=event_id).update(submissions_close=timezone.now() - timedelta(seconds=1))
+    Event.objects.filter(id=event_id).update(submissions_close=db_now() - timedelta(seconds=1))
     for state in ("closed", "judging"):
         assert admin.post(f"/e/{event_id}/state.json", {"state": state}, content_type="application/json").status_code == 200
     issued = admin.post(f"/e/{event_id}/assignment-runs.json", {"kind": "initial", "coverage": 2}, content_type="application/json")

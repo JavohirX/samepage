@@ -11,6 +11,7 @@ from django.utils import timezone
 from conftest import needs_db
 from samepage.apps.portal.models import Assignment, Event, Person, ScoreRev, Team, TeamMember
 from samepage.core.errors import Conflict
+from samepage.services.clock import db_now
 
 pytestmark = [needs_db, pytest.mark.django_db]
 
@@ -61,7 +62,7 @@ def test_scores_are_refused_after_judging_ends_until_the_organizer_extends_it(cl
     project = open_row.submission_id
     url = f"/e/evt_01/judge/assignments/{project}/finalize.json"
     body = {"criteria": {"functionality": 4, "quality": 4, "innovation": 4}}
-    Event.objects.filter(id="evt_01").update(judging_ends=timezone.now() - timedelta(minutes=1))
+    Event.objects.filter(id="evt_01").update(judging_ends=db_now() - timedelta(seconds=1))
     revs = ScoreRev.objects.count()
     late = client.post(url, body, content_type="application/json", **bearer("jdg08"))
     assert late.status_code == 409 and "Judging ended at" in late.json()["detail"]

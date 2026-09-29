@@ -28,6 +28,7 @@ from samepage.apps.portal.models import (
     Submission,
     Track,
 )
+from samepage.services.clock import db_now
 
 pytestmark = [needs_db, pytest.mark.django_db]
 
@@ -493,7 +494,7 @@ def test_full_lifecycle_create_submit_judge_publish(client, bearer):
         judges.append((added["person_id"], judge_client))
 
     # The deadline passes; the organizer closes the event, moves it to judging and issues batches.
-    Event.objects.filter(id=event_id).update(submissions_close=timezone.now() - timedelta(seconds=1))
+    Event.objects.filter(id=event_id).update(submissions_close=db_now() - timedelta(seconds=1))
     assert admin.post(f"/e/{event_id}/state.json", {"state": "closed"}, content_type="application/json").status_code == 200
     assert admin.post(f"/e/{event_id}/state.json", {"state": "judging"}, content_type="application/json").status_code == 200
     issued = admin.post(f"/e/{event_id}/assignment-runs.json", {"kind": "initial", "coverage": 3}, content_type="application/json")

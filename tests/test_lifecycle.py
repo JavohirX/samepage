@@ -30,6 +30,7 @@ from samepage.apps.portal.models import (
     TeamMember,
     Track,
 )
+from samepage.services.clock import db_now
 
 pytestmark = [needs_db, pytest.mark.django_db]
 
@@ -332,7 +333,7 @@ def test_teams_are_fixed_after_the_deadline(event):
     lead = _as(_person("l5@example.org"))
     team_id = lead.post(f"/e/{event.id}/teams.json", {"name": "Late"}, content_type="application/json").json()["id"]
     path = lead.post(f"/e/{event.id}/teams/{team_id}/invites.json", {}, content_type="application/json").json()["path"]
-    Event.objects.filter(id=event.id).update(submissions_close=timezone.now() - timedelta(minutes=1))
+    Event.objects.filter(id=event.id).update(submissions_close=db_now() - timedelta(seconds=1))
     assert _as(_person("late@example.org")).post(path + ".json").status_code == 409
     assert lead.post(f"/e/{event.id}/teams/{team_id}/leave.json").status_code == 409
 
@@ -413,7 +414,7 @@ def test_the_deadline_stops_edits_in_the_service_and_in_the_database(event, team
     project = browser.post(
         f"/e/{event.id}/projects.json", {"title": "Before", "submit": True, "q_license": "MIT"}, content_type="application/json"
     ).json()["id"]
-    Event.objects.filter(id=event.id).update(submissions_close=timezone.now() - timedelta(seconds=1))
+    Event.objects.filter(id=event.id).update(submissions_close=db_now() - timedelta(seconds=1))
     response = browser.patch(f"/e/{event.id}/projects/{project}.json", {"title": "After"}, content_type="application/json")
     assert response.status_code == 409
     assert "submissions closed at" in response.json()["detail"]
