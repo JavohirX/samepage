@@ -92,3 +92,40 @@ def test_login_next_cannot_leave_the_site(client):
         "/login", {"email": "organizer@example.org", "password": "samepage-demo", "next": "https://evil.example/"}
     )
     assert response["Location"] == "/"
+
+
+def test_the_front_door_asks_a_stranger_for_a_role_and_a_password(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert b'action="/login"' in response.content and b'name="role"' in response.content
+    assert "public" not in response.get("Cache-Control", "")  # the page carries a CSRF token
+    assert client.get("/e").status_code == 200  # the plain event list stays public
+
+
+@pytest.mark.parametrize(
+    ("email", "role", "landing"),
+    [
+        ("admin@example.org", "admin", "/"),
+        ("organizer@example.org", "organizer", "/e/evt_01/progress"),
+        ("marek.nowak@example.org", "judge", "/e/evt_01/judge/batches"),
+        ("priya1@example.org", "participant", "/e/evt_01/teams/tm_01"),
+    ],
+)
+def test_signing_in_as_a_role_lands_on_that_roles_panel(client, email, role, landing):
+    response = client.post("/login", {"email": email, "password": "samepage-demo", "role": role})
+    assert response.status_code == 303
+    assert response["Location"] == landing
+
+
+def test_signing_in_as_a_role_the_account_does_not_hold_is_refused(client):
+    response = client.post("/login", {"email": "marek.nowak@example.org", "password": "samepage-demo", "role": "admin"})
+    assert response.status_code == 403
+    assert b"It can sign in as: judge" in response.content
+    assert "_auth_user_id" not in client.session
+
+
+def test_a_next_link_wins_over_the_role_landing(client):
+    response = client.post(
+        "/login", {"email": "organizer@example.org", "password": "samepage-demo", "role": "organizer", "next": "/account"}
+    )
+    assert response["Location"] == "/account"

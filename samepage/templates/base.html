@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 <!doctype html>
 <html lang="en" data-theme="light">
 <head>
@@ -12,54 +12,80 @@
   {% endfor %}
 </head>
 <body>
+  {% if demo_mode %}{% block demo_strip %}
+  <aside class="demo-strip" aria-label="Demo accounts">
+    <span class="label">Demo</span>
+    {% for account in demo_accounts %}
+    <form method="post" action="/demo/enter/{{ account.slug }}">{% csrf_token %}<button type="submit" title="{{ account.email }}: {{ account.note }}"{% if account.slug == me_slug %} aria-current="true"{% endif %}>{{ account.label }}</button></form>
+    {% endfor %}
+    <span class="hint">one click switches account · password samepage-demo</span>
+  </aside>
+  {% endblock %}{% endif %}
   <header class="top">
     <div class="brand">
-      <a href="/">Samepage</a>
-      <span>every number opens as its rows</span>
+      <a class="home" href="/"><span class="mark" aria-hidden="true"></span>Samepage</a>
+      {% if event_id %}<a class="event-pill" href="/e/{{ event_id }}">{{ event_id }}</a>{% endif %}
     </div>
-    <nav>
-      {% if event_id %}
-      <a href="/e/{{ event_id }}">Event</a>
-      <a href="/e/{{ event_id }}/projects">Gallery</a>
-      <a href="/e/{{ event_id }}/voting">Vote</a>
-      <a href="/e/{{ event_id }}/results">Results</a>
-      {% if is_judge %}<a href="/e/{{ event_id }}/judge/batches">Console</a>{% endif %}
-      {% if is_staff %}
-      <a href="/e/{{ event_id }}/progress">Progress</a>
-      <a href="/e/{{ event_id }}/scores">Scores</a>
-      <a href="/e/{{ event_id }}/comments">Comments</a>
-      <a href="/e/{{ event_id }}/normalization">Lab</a>
-      <a href="/e/{{ event_id }}/duplicates">Duplicates</a>
-      <a href="/e/{{ event_id }}/audit">Audit</a>
-      <a href="/e/{{ event_id }}/settings">Manage</a>
-      {% endif %}
-      {% endif %}
-      <a href="/about/access">Access</a>
+    <nav aria-label="Account">
       {% if me %}
+      <a href="/">{% if me.is_admin %}Admin panel{% else %}My workspace{% endif %}</a>
+      <a href="/e">Events</a>
+      <a href="/about/access">Access</a>
+      <span class="who">{% for role in my_roles %}<span class="role {{ role }}">{{ role }}</span>{% empty %}{% if me.is_admin %}<span class="role admin">admin</span>{% endif %}{% endfor %}<span class="email">{{ me.email }}</span></span>
       <a href="/account">Account</a>
       <form method="post" action="/logout">{% csrf_token %}<button class="outline" type="submit">Sign out</button></form>
       {% else %}
-      <a href="/login" role="button" class="outline">Sign in</a>
+      <a href="/e">Events</a>
+      <a href="/about/access">Access</a>
+      <a href="/login" role="button">Sign in</a>
       {% endif %}
     </nav>
   </header>
-  {% if demo_mode %}
-  <aside class="demo">
-    <span>Demo sign-in</span>
-    <form method="post" action="/demo/enter/org">{% csrf_token %}<button type="submit" class="outline">Organizer</button></form>
-    <form method="post" action="/demo/enter/jdg08">{% csrf_token %}<button type="submit" class="outline">Judge A</button></form>
-    <form method="post" action="/demo/enter/jdg03">{% csrf_token %}<button type="submit" class="outline">Judge B</button></form>
-    <form method="post" action="/demo/enter/priya1">{% csrf_token %}<button type="submit" class="outline">Participant</button></form>
-    <form method="post" action="/demo/enter/control">{% csrf_token %}<button type="submit" class="outline">Participant (open event)</button></form>
-    <form method="post" action="/demo/enter/admin">{% csrf_token %}<button type="submit" class="outline">Admin</button></form>
-    {% if me %}<em>signed in as {{ me.email }}</em>{% endif %}
-  </aside>
+  {% if event_id %}
+  <nav class="tabs" aria-label="Event">
+    {% if is_staff %}
+    <span class="group">Control panel</span>
+    {% tab event_id "progress" "Progress" %}
+    {% tab event_id "assignments" "Assignments" %}
+    {% tab event_id "scores" "Scores" %}
+    {% tab event_id "results" "Results" %}
+    {% tab event_id "normalization" "Lab" %}
+    {% tab event_id "duplicates" "Duplicates" %}
+    {% tab event_id "comments" "Comments" %}
+    {% tab event_id "audit" "Audit" %}
+    {% tab event_id "settings" "Settings" %}
+    <span class="sep"></span>
+    {% endif %}
+    {% if is_judge %}
+    <span class="group">Judge</span>
+    {% tab event_id "judge/batches" "Console" %}
+    {% tab event_id "judges/me/scores" "My scores" %}
+    <span class="sep"></span>
+    {% endif %}
+    {% if my_team %}
+    <span class="group">My team</span>
+    {% tab event_id "teams/"|add:my_team "Team and submission" %}
+    <span class="sep"></span>
+    {% endif %}
+    <span class="group">Public</span>
+    {% tab event_id "" "Event" %}
+    {% tab event_id "projects" "Gallery" %}
+    {% tab event_id "voting" "Vote" %}
+    {% if not is_staff %}{% tab event_id "results" "Results" %}{% endif %}
+  </nav>
+  {% if lifecycle %}
+  <div class="lifecycle">
+    <span class="group">Event state</span>
+    <ol>{% for step in lifecycle %}<li class="{{ step.mark }}">{{ step.name }}</li>{% endfor %}</ol>
+    <a href="/e/{{ event_id }}/settings">Change state →</a>
+  </div>
+  {% endif %}
   {% endif %}
   <main class="container">
     {% block main %}{% endblock %}
   </main>
   <footer class="site">
-    <span>Samepage</span>
+    <span>Samepage · every number opens as the rows behind it</span>
     <span>HTML, JSON and CSV from one policy check</span>
   </footer>
 </body>

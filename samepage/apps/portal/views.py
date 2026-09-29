@@ -8,6 +8,7 @@ import logging
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.db import DatabaseError, connection, transaction
+from django.db.models import Count
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -200,7 +201,21 @@ class HomeView(SamepageView):
             "can_create_event": is_admin,
             "html_omitted": {},
         }
-        return render_payload(request, payload, fmt, template="home.html", public_cache=not request.principal)
+        html = negotiate(request, fmt if fmt is not None else getattr(request, "samepage_fmt", None)) == "html"
+        if html and principal is None and request.path == "/":
+            # The front door: a stranger opening the portal is asked who they are. /e stays the plain list.
+            return render_payload(
+                request,
+                payload,
+                fmt,
+                template="login.html",
+                public_cache=False,
+                extra={"page_title": "Sign in", "error": "", "email": "", "role": "participant", "next": ""},
+            )
+        extra = _workspace(principal, events, is_admin) if html and principal is not None else None
+        return render_payload(
+            request, payload, fmt, template="home.html", public_cache=not request.principal, extra=extra
+        )
 
     def post(self, request, fmt=None):
         """POST /e: create an event (global admins). The home page itself takes no POST."""
@@ -239,15 +254,83 @@ class NewEventView(SamepageView):
         return render_payload(request, payload, fmt, template="event_new.html")
 
 
+def _workspace(principal, events: list[dict], is_admin: bool) -> dict:
+    """HTML-only context for the signed-in home page: one card per event the person has a role in."""
+    open_reviews = dict(
+        Assignment.objects.filter(judge=principal, finalized_at__isnull=True)
+        .values_list("submission__event_id")
+        .annotate(n=Count("id"))
+    )
+    cards, others = [], []
+    for item in events:
+        roles = set(item["your_roles"].split())
+        if not roles - {"admin"} and not item["your_team"]:
+            others.append(item)
+            continue
+        cards.append(
+            {
+                **item,
+                "roles": [role for role in ("organizer", "judge", "participant") if role in roles],
+                "staff": bool(roles & {"organizer", "admin"}),
+                "judge": "judge" in roles,
+                "open_reviews": open_reviews.get(item["id"], 0),
+            }
+        )
+    extra = {"page_title": "Admin panel" if is_admin else "My workspace", "workspaces": cards, "other_events": others}
+    if is_admin:
+        extra["stats"] = [
+            ("Events", len(events)),
+            ("Submissions", Submission.objects.exclude(state="draft").count()),
+            ("Judges", RoleGrant.objects.filter(role="judge").values("person").distinct().count()),
+            ("Open reviews", Assignment.objects.filter(finalized_at__isnull=True).count()),
+        ]
+    return extra
+
+
+SIGN_IN_ROLES = ("participant", "judge", "organizer", "admin")
+
+
+def _landing(user, role: str) -> str | None:
+    """Where signing in as `role` lands: that role's own page. None when the account does not hold the role.
+
+    It only picks a page. Every request after it is checked against the policy table as usual.
+    """
+    if role == "admin":
+        return "/" if user.is_admin else None
+    if role in ("organizer", "judge"):
+        grants = RoleGrant.objects.filter(person=user, role=role).order_by("event_id")
+        event_id = grants.values_list("event_id", flat=True).first()
+        if event_id is None and user.is_admin:
+            event_id = Event.objects.order_by("id").values_list("id", flat=True).first()
+        if event_id is None:
+            return None
+        return f"/e/{event_id}/progress" if role == "organizer" else f"/e/{event_id}/judge/batches"
+    # A participant goes to their team, an open event's first; anyone signed in may join one from home.
+    members = TeamMember.objects.filter(person=user).select_related("event")
+    member = min(members, key=lambda m: (m.event.state != "open", m.event_id), default=None)
+    return f"/e/{member.event_id}/teams/{member.team_id}" if member is not None else "/"
+
+
+def _roles_held(user) -> list[str]:
+    held = set(RoleGrant.objects.filter(person=user).values_list("role", flat=True))
+    if user.is_admin:
+        held.add("admin")
+    return [role for role in SIGN_IN_ROLES if role in held]
+
+
 class LoginView(SamepageView):
     throttle_classes = [LoginThrottle]
     throttle_scope = "login"
 
+    def _form(self, request, fmt, *, status, error="", email="", role="participant", next_url=""):
+        context = {"page_title": "Sign in", "error": error, "email": email, "role": role, "next": next_url}
+        response = render(request, "login.html", context, status=status)
+        return annotate(response, request, fmt=fmt, public_cache=False)
+
     def get(self, request, fmt=None):
         if request.principal is not None:
             return Redirect303("/")
-        response = render(request, "login.html", {"page_title": "Sign in", "error": ""}, status=401)
-        return annotate(response, request, fmt=fmt, public_cache=False)
+        return self._form(request, fmt, status=401, next_url=request.GET.get("next", ""))
 
     def post(self, request, fmt=None):
         # Signing in writes a session cookie, so a cross-site form must not be able to do it.
@@ -255,36 +338,30 @@ class LoginView(SamepageView):
         body = _body(request)
         email = str(body.get("email") or "").strip()
         password = str(body.get("password") or "")
+        role = str(body.get("role") or "")
+        next_url = str(body.get("next") or "")
+        form = {"email": email, "role": role or "participant", "next_url": next_url}
         user = None
         # The demo password is published in this repository. Outside demo mode it never signs anyone in.
         if settings.DEMO_MODE or password != DEMO_PASSWORD:
             user = authenticate(request, email=email, password=password)
         if user is None:
-            response = render(
-                request,
-                "login.html",
-                {"page_title": "Sign in", "error": "Those credentials were refused.", "email": email},
-                status=401,
-            )
-            return annotate(response, request, fmt=fmt, public_cache=False)
+            return self._form(request, fmt, status=401, error="Those credentials were refused.", **form)
+        landing = None
+        if role in SIGN_IN_ROLES and next_url in ("", "/"):
+            landing = _landing(user, role)
+            if landing is None:
+                held = ", ".join(_roles_held(user)) or "participant"
+                error = f"{email} is not {'an' if role in ('organizer', 'admin') else 'a'} {role} anywhere. It can sign in as: {held}."
+                return self._form(request, fmt, status=403, error=error, **form)
         login(request, user)
-        return Redirect303(_next_url(request, body.get("next")))
+        return Redirect303(landing or _next_url(request, next_url))
 
 
 class LogoutView(SamepageView):
     def post(self, request, fmt=None):
         logout(request)
         return Redirect303("/")
-
-
-DEMO_LANDING = {
-    "org": "/e/evt_01/progress",
-    "admin": "/e/evt_01/progress",
-    "jdg08": "/e/evt_01/judge/batches",
-    "jdg03": "/e/evt_01/judge/batches",
-    "priya1": "/e/evt_01/projects",
-    "control": "/e/evt_02/projects",
-}
 
 
 class DemoEnterView(SamepageView):
@@ -305,19 +382,19 @@ class DemoEnterView(SamepageView):
         return spec, user
 
     def get(self, request, slug, fmt=None):
-        spec, _user = self._principal(slug)
+        spec, user = self._principal(slug)
         response = render(
             request,
             "demo_enter.html",
-            {"page_title": "Demo sign-in", "slug": slug, "spec": spec, "landing": DEMO_LANDING.get(slug, "/")},
+            {"page_title": "Demo sign-in", "slug": slug, "spec": spec, "landing": _landing(user, spec["role"]) or "/"},
         )
         return annotate(response, request, fmt=fmt, public_cache=False)
 
     def post(self, request, slug, fmt=None):
-        _spec, user = self._principal(slug)
+        spec, user = self._principal(slug)
         enforce_csrf(request)
         login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-        return Redirect303(DEMO_LANDING.get(slug, "/"))
+        return Redirect303(_landing(user, spec["role"]) or "/")
 
 
 class AccessView(SamepageView):

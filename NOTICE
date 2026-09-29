@@ -28,3 +28,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+This product includes the Inter variable font (samepage/static/fonts/inter-latin-wght-normal.woff2),
+https://github.com/rsms/inter, and IBM Plex Mono (samepage/static/fonts/ibm-plex-mono-latin-*.woff2),
+https://github.com/IBM/plex, both under the SIL Open Font License 1.1. The license texts are in
+samepage/static/fonts/LICENSE-Inter.txt and samepage/static/fonts/LICENSE-IBM-Plex.txt.

@@ -1,16 +1,47 @@
 {% extends "base.html" %}
+{% load static %}
+{% block demo_strip %}{% endblock %}
 {% block main %}
-<h1>Sign in</h1>
-{% if error %}<p class="banner">{{ error }}</p>{% endif %}
-<form method="post" action="/login">
-  {% csrf_token %}
-  <label>Email <input type="email" name="email" value="{{ email|default:'' }}" required autocomplete="username"></label>
-  <label>Password <input type="password" name="password" required autocomplete="current-password"></label>
-  <input type="hidden" name="next" value="{{ request.GET.next|default:'/' }}">
-  <button type="submit">Sign in</button>
-</form>
-<p class="meta">No account? <a href="/signup{% if request.GET.next %}?next={{ request.GET.next|urlencode }}{% endif %}">Create one</a>.</p>
-{% if demo_mode %}
-<p class="meta">Demo password is <code>samepage-demo</code>. Organizer is organizer@example.org. Or use the demo links above.</p>
-{% endif %}
+<section class="signin{% if not demo_mode %} solo{% endif %}">
+  <div class="form-side">
+    <p class="kicker">Samepage · submission and judging portal</p>
+    <h1>Sign in</h1>
+    <p class="lede">Pick your role and sign in. You land on that role's own panel.</p>
+    {% if error %}<p class="banner" role="alert">{{ error }}</p>{% endif %}
+    <form method="post" action="/login" id="signin-form">
+      {% csrf_token %}
+      <label id="role-label">Role</label>
+      <div class="roles" role="radiogroup" aria-labelledby="role-label">
+        <label data-note="Your team, your project and its deadline."><input type="radio" name="role" value="participant"{% if role == "participant" or not role %} checked{% endif %}>Participant</label>
+        <label data-note="Your judging console: the projects assigned to you."><input type="radio" name="role" value="judge"{% if role == "judge" %} checked{% endif %}>Judge</label>
+        <label data-note="The event's control panel: progress, judges, results."><input type="radio" name="role" value="organizer"{% if role == "organizer" %} checked{% endif %}>Organizer</label>
+        <label data-note="The admin panel: every event, and new ones."><input type="radio" name="role" value="admin"{% if role == "admin" %} checked{% endif %}>Admin</label>
+      </div>
+      <p class="role-note" id="role-note">The server checks the role on every request, not just here.</p>
+      <label>Email <input type="email" name="email" id="signin-email" value="{{ email|default:'' }}" required autocomplete="username"></label>
+      <label>Password <input type="password" name="password" id="signin-password" required autocomplete="current-password"></label>
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      <button type="submit" id="signin-submit">Sign in</button>
+    </form>
+    <p class="after">
+      <span>No account? <a href="/signup{% if next %}?next={{ next|urlencode }}{% endif %}">Create one</a></span>
+      <a href="/e">Browse as a visitor →</a>
+    </p>
+  </div>
+  {% if demo_mode %}
+  <aside class="demo-side" aria-label="Demo accounts">
+    <h2>Demo accounts</h2>
+    <p>This is the evaluation build. Every account's password is <code>samepage-demo</code>. Pick one to fill in the form.</p>
+    <ul class="accounts">
+      {% for account in demo_accounts %}
+      <li><button type="button" data-email="{{ account.email }}" data-role="{{ account.role }}" aria-pressed="false">
+        <span class="r">{{ account.label }}</span><span class="e">{{ account.email }}</span><span class="w">{{ account.note }}</span>
+      </button></li>
+      {% endfor %}
+    </ul>
+    <p class="fine">In production mode (SAMEPAGE_MODE=production) these accounts do not exist and this password is refused.</p>
+  </aside>
+  {% endif %}
+</section>
+<script src="{% static 'signin.js' %}" defer></script>
 {% endblock %}

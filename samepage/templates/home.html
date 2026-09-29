@@ -1,24 +1,73 @@
 {% extends "base.html" %}
-{% load cells %}
 {% block main %}
-<section class="hero">
-  <p class="kicker">DOGFOOD 2026</p>
-  <h1>Every number opens as the rows behind it.</h1>
-  <p>Each list page is also a CSV file and a JSON file. All three come from the same rows, through the same policy check. A statsmodels container re-derives the ranking from the scores.csv an organizer downloads.</p>
-</section>
+{% if me %}
+<header class="page">
+  <div>
+    <p class="kicker">{% if me.is_admin %}Admin panel{% else %}My workspace{% endif %}</p>
+    <h1>{% if me.is_admin %}Every event on this portal{% else %}Your events{% endif %}</h1>
+    <p class="meta">Signed in as {{ me.email }}.</p>
+  </div>
+  {% if payload.can_create_event %}<a href="/e/new" role="button">New event</a>{% endif %}
+</header>
+{% endif %}
+
+{% if stats %}
+<dl class="stats">
+  {% for label, value in stats %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}
+</dl>
+{% endif %}
+
+{% if me and not me.is_admin %}
+{% if workspaces %}
+<div class="workspaces">
+  {% for w in workspaces %}
+  <article class="workspace">
+    <header><span class="kicker">{{ w.id }}</span><span class="state {{ w.state }}">{{ w.state }}</span></header>
+    <h3>{{ w.name }}</h3>
+    <p>{% for role in w.roles %}<span class="role {{ role }}">{{ role }}</span> {% endfor %}</p>
+    <p class="meta mono">Closes {{ w.submissions_close }}</p>
+    {% if w.judge %}<p>{{ w.open_reviews }} review{{ w.open_reviews|pluralize }} waiting for you.</p>{% endif %}
+    <div class="actions">
+      {% if w.staff %}<a role="button" href="/e/{{ w.id }}/progress">Open control panel</a>{% endif %}
+      {% if w.judge %}<a role="button" href="/e/{{ w.id }}/judge/batches">Open judge console</a>{% endif %}
+      {% if w.your_team %}<a role="button" href="/e/{{ w.id }}/teams/{{ w.your_team }}">My team</a>{% endif %}
+      <a role="button" class="outline" href="/e/{{ w.id }}/projects">Gallery</a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<p class="banner">You have no role in any event yet. Open an event below and start a team, or ask an organizer for an invitation.</p>
+{% endif %}
+{% endif %}
+
 <section>
-  <header class="page"><h2>Events</h2>{% if payload.can_create_event %}<a href="/e/new" role="button">New event</a>{% endif %}</header>
-  <ul class="events">
+  <header class="page">
+    <h2>{% if me and not me.is_admin %}Other events{% else %}Events{% endif %}</h2>
+    <p class="tools"><a href="/e.json">JSON</a> <a href="/e.csv">CSV</a></p>
+  </header>
+  <figure>
+  <table>
+    <thead><tr><th>Event</th><th>State</th><th>Submissions close (UTC)</th>{% if me %}<th>Your role</th>{% endif %}<th></th></tr></thead>
+    <tbody>
     {% for item in items %}
-    <li><a href="/e/{{ item.id }}"><data data-field="name" value="{{ item.name }}">{{ item.name }}</data></a>
-      <data data-field="state" value="{{ item.state }}">{{ item.state }}</data>
-      · <a href="/e/{{ item.id }}/projects">gallery</a>
-      {% if item.your_roles %}<span class="meta">· you: {{ item.your_roles }}</span>{% endif %}
-    </li>
+    {% if not me or me.is_admin or item in other_events %}
+    <tr>
+      <td><a href="/e/{{ item.id }}"><data data-field="name" value="{{ item.name }}">{{ item.name }}</data></a> <span class="id">{{ item.id }}</span></td>
+      <td><data data-field="state" value="{{ item.state }}"><span class="state {{ item.state }}">{{ item.state }}</span></data></td>
+      <td class="mono">{{ item.submissions_close }}</td>
+      {% if me %}<td>{% for role in item.your_roles.split %}<span class="role {{ role }}">{{ role }}</span> {% empty %}<span class="meta">none</span>{% endfor %}</td>{% endif %}
+      <td>
+        {% if me.is_admin %}<a href="/e/{{ item.id }}/progress">Control panel</a> · <a href="/e/{{ item.id }}/settings">Settings</a> · {% endif %}<a href="/e/{{ item.id }}/projects">Gallery</a>
+      </td>
+    </tr>
+    {% endif %}
     {% empty %}
-    <li>No events yet.</li>
+    <tr><td colspan="5">No events yet.</td></tr>
     {% endfor %}
-  </ul>
-  {% if not me %}<p class="meta"><a href="/signup">Create an account</a> to join a team, or <a href="/login">sign in</a>.</p>{% endif %}
+    </tbody>
+  </table>
+  </figure>
+  {% if not me %}<p class="meta"><a href="/login">Sign in</a> or <a href="/signup">create an account</a> to join a team.</p>{% endif %}
 </section>
 {% endblock %}
